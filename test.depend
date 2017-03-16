@@ -1,0 +1,147 @@
+# depslib dependency file v1.0
+1489501524 source:/home/heaven/Documents/C/test/main.c
+	<stdio.h>
+	<stdlib.h>
+	<mysql/mysql.h>
+	<guestfs.h>
+	"ext2_qcow2/inode.h"
+
+1488316516 /home/heaven/Downloads/libguestfs-1.36.1/lib/guestfs.h
+	<stddef.h>
+	<stdint.h>
+	<stdarg.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/stdio.h
+	<stdarg.h>
+	<stddef.h>
+	<sys/types.h>
+	<unistd.h>
+	<stdlib.h>
+	<io.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/sys/types.h
+	<stddef.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/unistd.h
+	<winsock2.h>
+	<stddef.h>
+	<stdio.h>
+	<fcntl.h>
+	<stdlib.h>
+	<io.h>
+	<direct.h>
+	<io.h>
+	<netdb.h>
+	<sys/types.h>
+	<sys/types.h>
+	<getopt.h>
+	<TargetConditionals.h>
+	<crt_externs.h>
+	<OS.h>
+	<sys/param.h>
+
+1488804082 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/fcntl.h
+	<sys/types.h>
+	<sys/stat.h>
+	<sys/types.h>
+	<sys/stat.h>
+	<unistd.h>
+	<io.h>
+	<limits.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/sys/stat.h
+	<sys/types.h>
+	<time.h>
+	<io.h>
+	<direct.h>
+	<io.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/time.h
+	<stddef.h>
+	<sys/time.h>
+	<pthread.h>
+	<unistd.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/sys/time.h
+	<time.h>
+	<winsock2.h>
+
+1488804082 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/limits.h
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/stdlib.h
+	<stddef.h>
+	<sys/wait.h>
+	<sys/loadavg.h>
+	<io.h>
+	<random.h>
+	<stdint.h>
+	<unistd.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/sys/wait.h
+	<sys/types.h>
+	<signal.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/signal.h
+	<sys/types.h>
+	<pthread.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/stdint.h
+	<limits.h>
+	<sys/types.h>
+	<inttypes.h>
+	<sys/inttypes.h>
+	<sys/bitypes.h>
+	<stddef.h>
+	<stdio.h>
+	<time.h>
+	<wchar.h>
+
+1488804082 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/inttypes.h
+	<stdint.h>
+	<limits.h>
+	<stdio.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/wchar.h
+	<features.h>
+	<stddef.h>
+	<stdio.h>
+	<time.h>
+	<crtdefs.h>
+
+1488804082 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/netdb.h
+	<sys/socket.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/sys/socket.h
+	<sys/types.h>
+	<stddef.h>
+	<stdalign.h>
+	<sys/uio.h>
+	<winsock2.h>
+	<ws2tcpip.h>
+	<sys/types.h>
+	<io.h>
+
+1488804083 /home/heaven/Downloads/libguestfs-1.36.1/gnulib/lib/sys/uio.h
+	<sys/types.h>
+	<sys/types.h>
+
+1489329569 /home/heaven/Documents/C/test/include/ext2.h
+	<stdio.h>
+
+1489058542 /home/heaven/Documents/C/test/ext2_qcow2/inode.c
+	"../include/ext2.h"
+
+1489495958 /home/heaven/Documents/C/test/ext2_qcow2/inode.h
+	"../include/ext2.h"
+	"../include/qcow2.h"
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+
+1489504839 source:/home/heaven/Documents/C/test/ext2_qcow2/inode.c
+	"inode.h"
+
+1489060192 source:/home/heaven/Documents/C/test/ext2_qcow2/inode.h
+
+1489482558 /home/heaven/Documents/C/test/include/qcow2.h
+
