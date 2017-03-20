@@ -1,16 +1,24 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <mysql/mysql.h>
 #include <guestfs.h>
 //#include "include/ext2.h"
 #include "ext2_qcow2/inode.h"
+#include "sql/csql.h"
 //#include <mcheck.h>
 
 int main()
 {
     //mtrace();
-    guestfs_h *g=guestfs_create();
+    char **image_abspath;
 
+    guestfs_h *g=guestfs_create();
+    /*********************************read the image path***************************************/
+    if(!read_host_image_name(image_abspath)){
+        printf("\n read image abspath failed!");
+        return 0;
+    }
     MYSQL *my_conn;
 
     MYSQL_RES *res;
@@ -24,7 +32,8 @@ int main()
         printf("Connect Error!n");
         exit(1);
     }
-    if(mysql_query(my_conn,"select baseImages.name as bn,overlays.name as oln from baseImages join overlays where overlays.id=1")) //连接baseImages表
+
+    if(mysql_query(my_conn,"select baseImages.absPath as bn,overlays.absPath as oln from baseImages join overlays where overlays.id=1")) //连接baseImages表
 
     {
         printf("Query Error!n");
@@ -54,10 +63,11 @@ int main()
 //    guestfs_umount(g,"/");
 //    guestfs_shutdown(g);
 //    guestfs_close(g);
-    which_images_by_inode(bn,oln,133415);//133415
+    which_images_by_inode(bn,oln,140863);//133415
     mysql_free_result(res); //关闭结果集
     mysql_close(my_conn); //关闭与数据库的连接
 
     //muntrace();
     return 0;
 }
+
