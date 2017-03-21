@@ -1,4 +1,4 @@
-#include "../sql/csql.h"
+#include "csql.h"
 
 
 /*
@@ -7,7 +7,7 @@
  *detail:begin to read host image name
  *return 1:success,0:failed
  */
- int read_host_image_name(char **image_abspath){
+ int read_host_image_name(char **image_abspath,char **image_id){
     //host name
     char hostName[32];
     long int hostId;
@@ -87,6 +87,7 @@
         if(baseImage_status==1){
             /**注意row[0]是char*类型，因此无需取地址*/
             baseImages[count]=row[0];
+            /*为了使用mysql中in关键字*/
             strcat(str_baseImages_id,row[2]);
             strcat(str_baseImages_id,",");
             //baseImages[i]=strdup(baseImages[i]);
@@ -107,6 +108,7 @@
     /************************************************read overlay images by the host images id****************************************/
     if(count>0){
         printf("\n str_baseImages_id:%d,content:%s",strlen(str_baseImages_id),str_baseImages_id);
+        /*去除最后一位逗号*/
         str_baseImages_id[strlen(str_baseImages_id)-1]='\0';
         printf("\n content:%s",str_baseImages_id);
         sprintf(strsql,"select overlays.absPath,overlays.status,overlays.id \
@@ -124,16 +126,17 @@
             printf("\n no overlay images in the server!");
             return -5;
         }
-        image_abspath=malloc(count * sizeof(char *));
+        //image_abspath=malloc((count+1) * sizeof(char *));
         count=0;
         while((row=mysql_fetch_row(res))){
             overlayImage_status=atoi(row[1]);
-            printf("\n overlay image status:%d",overlayImage_status);
+            //printf("\n overlay image status:%d",overlayImage_status);
             if(overlayImage_status==1){
                 /**注意row[0]是char*类型，因此无需取地址*/
                 image_abspath[count]=row[0];
+                image_id[count]=row[2];
                 //baseImages[i]=strdup(baseImages[i]);
-                printf("\n the overlay image path:%s",image_abspath[count]);
+                printf("\n status is 1,the overlay image path:%s",image_abspath[count]);
                 count++;
             }
             if(overlayImage_status==2){
@@ -145,10 +148,17 @@
             }
             if(overlayImage_status==0){continue;};
         }
+        image_abspath[count]=NULL;
+        image_id[count]=NULL;
     }else{
         printf("\n no overlay image status is 1");
         return -6;
     }
+    for(i=0;image_abspath[i];i++){
+        printf("\n test the overlay images path:%s,id:%s",image_abspath[i],image_id[i]);
+    }
+    /**没有可用的镜像*/
+    if(image_id[0]==NULL){return 0;};
     //printf("\nsize of imagePath:%d",sizeof(image_abspath));
     /*******************************************read overlay images by the host images id***end******************************************/
 

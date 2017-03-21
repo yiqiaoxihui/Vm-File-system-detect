@@ -15,6 +15,7 @@ int test(char *baseImage,char *qcow2Image,unsigned int inode);
 
 int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block,__U16_TYPE block_size);
 
+void *multi_read_image_file(void *path);
 //int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__U16_TYPE block_bits,unsigned int bytes_offset_into_block,struct ext2_inode *inode);
 
 #endif // __INODE_H_INCLUDED

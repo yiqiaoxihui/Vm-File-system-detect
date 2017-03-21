@@ -1,12 +1,65 @@
 
-#include "inode.h"
+//#include "inode.h"
+//#include <mysql/mysql.h>
+#include "../base.h"
+//struct ThreadVar{
+//    char *image_id;
+//    MYSQL *con;
+//};
+/*
+ *author:liuyang
+ *date  :2017/3/21
+ *detail:多线程读取多个镜像，更新监控文件信息
+ *return 1
+ */
+void *multi_read_image_file(void *var){
+    struct ThreadVar *threadVar=(struct ThreadVar *)var;
+    char *image_id;
+    char strsql[256];
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    int count;
+    image_id=threadVar->image_id;
+    my_conn=threadVar->con;
+    //image_id=(char *)id;
+    printf("\n in multi the image path:%s",threadVar->image_id);
+    sprintf(strsql,"select file.absPath from file join overlays where overlays.id=file.overlayId and overlay.id=1");
+    if(mysql_query(my_conn,strsql)){
+        printf("\n query the image file failed!");
+        //pthread_exit(0);
+    }
+//    res=mysql_store_result(my_conn);
+//    count=mysql_num_rows(res);
+//    if(count<=0){
+//        printf("\n no file!");
+//        //pthread_exit(0);
+//    }
+//    //printf("\n######################count:%d",count);
+//    while((row=mysql_fetch_row(res))){
+//        printf("\n the file name:%s",row[0]);
+//    }
+//    guestfs_add_drive(g,image);
+//    guestfs_launch(g);
+//    guestfs_mount(g,"/dev/sda1","/");
+//    char **filename=guestfs_ls(g,"/");
+//    for(i=0; i<sizeof(filename); i++)
+//        printf("\nfilename:%s,number:%d",*(filename+i),i);
+//    struct guestfs_statns *gs1=guestfs_statns(g,"/home/base/a.txt");
+//    if(gs1!=NULL){
+//            printf("\ninode:%ld,blocks:%ld,blksize%ld,size%ld",gs1->st_ino,gs1->st_blocks,gs1->st_blksize,gs1->st_size);
+//    }
+//
+//    guestfs_umount(g,"/");
+//    guestfs_shutdown(g);
+//    guestfs_close(g);
+}
 /*
  *author:liuyang
  *date  :2017/3/16
  *detail:判断inode是否在overlay中，如果在，读取inode结构
  *return 1:inode in overlay,0:inode in baseImage,<0:error
  */
-
 int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,unsigned int bytes_offset_into_block,__U16_TYPE block_bits,struct ext2_inode *inode){
     FILE *bi_fp,*l_fp;
     QCowHeader *header;
@@ -47,7 +100,7 @@ int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,un
         printf("\n read backingfile name error!");
         return -3;
     }
-    printf("\n size:%d,backing file name:%s,string len %d",header->backing_file_size,read_backingfile_name,sizeof(read_backingfile_name));
+    printf("\n size:%ld,backing file name:%s,string len %ld",header->backing_file_size,read_backingfile_name,sizeof(read_backingfile_name));
     if(strstr(baseImage,read_backingfile_name)==NULL){
         printf("\n wrong overlay images!");
         return -4;
@@ -73,7 +126,7 @@ int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,un
         return -6;
     }
     l2_offset=__bswap_64(l2_offset) & L1E_OFFSET_MASK;
-    printf("\nsize:%d l2_offset:%x",sizeof(l2_offset),l2_offset);
+    printf("\nsize:%d l2_offset:%lx",sizeof(l2_offset),l2_offset);
     /***************************根据块偏移映射到l1,l2表，判断该块在增量中是否分配,如果数据块在cluster中分配，读取相应的inode结构体信息****************************************************************/
     if(!l2_offset){
         printf("\n l2 table has not been allocated,the data must in backing file!");
