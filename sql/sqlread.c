@@ -1,5 +1,4 @@
-#include "csql.h"
-
+#include "sqlread.h"
 
 /*
  *author:liuyang
@@ -182,7 +181,7 @@
 //       printf("\n");
 //    }
 
-
+    free(baseImages);
     printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^^^^^^^^^^^^^^^^^^^^^^");
     return 1;
  }

@@ -35,19 +35,35 @@
 			<Add option="-lmysqlclient" />
 			<Add option="-lguestfs" />
 		</Linker>
+		<Unit filename="base.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
 		<Unit filename="ext2_qcow2/inode.c">
 			<Option compilerVar="CC" />
+			<Option compile="0" />
+			<Option link="0" />
+			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="ext2_qcow2/inode.h">
-			<Option compile="1" />
-			<Option link="1" />
 			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="include/ext2.h">
 			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
+		<Unit filename="include/qcow2.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="sql/sqlread.c">
+			<Option compilerVar="CC" />
+			<Option compile="0" />
+			<Option link="0" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="sql/sqlread.h">
+			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Extensions>
 			<code_completion />
