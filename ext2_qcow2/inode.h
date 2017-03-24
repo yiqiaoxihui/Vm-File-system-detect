@@ -24,6 +24,8 @@ int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block,__U16_TYP
 void *multi_read_image_file(void *path);
 
 int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,unsigned int bytes_offset_into_block,__U16_TYPE block_bits,struct ext2_inode *inode);
-//int is_base_image_identical(char *overlay_image_id,char *base_image_path);
 
+int is_base_image_identical(char *overlay_image_id,char **base_image_path);
+
+int update_file_metadata(char *overlay_image_path,char *base_image_path,int inodes[],int count);
 #endif // __INODE_H_INCLUDED
