@@ -29,5 +29,5 @@ int inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_offset,
 
 int is_base_image_identical(char *overlay_image_id,char **base_image_path);
 
-int update_file_metadata(char *overlay_image_path,char *base_image_path,int inodes[],int inode_count);
+int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TYPE **inodes,int inode_count);
 #endif // __INODE_H_INCLUDED
