@@ -180,8 +180,41 @@
 //       }
 //       printf("\n");
 //    }
-
+    mysql_close(my_conn);
     free(baseImages);
     printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^^^^^^^^^^^^^^^^^^^^^^");
     return 1;
  }
+/*
+ *author:liuyang
+ *date  :2017/3/27
+ *detail:更新文件信息，inode及数据块位置
+ *return 1:success,0:failed
+ */
+ int sql_update_file_metadata(char  *overlay_id,__U64_TYPE inode_number,__U16_TYPE mode,__U32_TYPE dtime,int inodePosition,int dataPosition){
+    printf("\n\n\n\n\n\n\n begin sql_update_file_metadata......%s,%d,%d,%d,%d,%d",overlay_id,inode_number,mode,dtime,inodePosition,dataPosition);
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    char strsql[256];
+    my_conn=mysql_init(NULL);
+    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","detect",0,NULL,0)) //连接detect数据库
+    {
+        printf("\nConnect Error!");
+        return 0;
+    }
+    sprintf(strsql,"update file join overlays \
+            set file.mode=%d,deleteTime=from_unixtime(%d),inodePosition=%d,dataPosition=%d \
+            where overlays.id=%s and overlays.id=file.overlayId and file.inode=%ld",mode,dtime,inodePosition,dataPosition,overlay_id,inode_number);
+    if(mysql_query(my_conn,strsql)){
+        printf("in sql_update_file_metadata update failed!");
+        return -1;
+    }
+    if(mysql_affected_rows(my_conn)>=0){
+        printf("\n%d update successfully,leave sql_update_file_metadata.......\n\n\n\n\n\n",mysql_affected_rows(my_conn));
+        return 1;
+    }
+    return 0;
+ }
+
+

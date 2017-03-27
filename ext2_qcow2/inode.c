@@ -102,7 +102,8 @@ void *multi_read_image_file(void *var){
     guestfs_umount(g,"/");
     guestfs_shutdown(g);
     guestfs_close(g);
-    update_file_metadata(overlay_image_path,*base_image_path,&inodes,count);
+    mysql_close(my_conn);
+    update_file_metadata(overlay_image_path,*base_image_path,&inodes,count,overlay_image_id);
     //for(i=0;inodes[i];i++)printf("\n inode %d:%d",i,inodes[i]);
     /****************************************使用guestfs读取文件inode元信息，更新文件状态***end***********************************************/
     free(base_image_path);
@@ -133,6 +134,7 @@ int inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_offset,
     char *read_backingfile_name;
     int i,j;
     int count;
+
     printf("\n\n\n\n\n\n\n begin inode_in_overlay.........");
     l_fp=fopen(qcow2Image,"r");
     if(l_fp==NULL){
@@ -250,7 +252,7 @@ int inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_offset,
  *detail:由inode判断文件的位置,更新文件信息
  *return
  */
-int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TYPE **inodes,int inode_count){
+int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TYPE **inodes,int inode_count,char *overlay_id){
     printf("\n\n\n\n\n\n\n\nnin begin update_file_metadata......%d",*((*inodes)+1));
     struct ext2_super_block *es;
     struct ext2_group_desc *gdesc;
@@ -274,7 +276,7 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
     __U32_TYPE inode_block_offset_in_inodetable;
     __U32_TYPE *inode_bytes_offset_into_inodetable;//inode在块内偏移字节
     __U32_TYPE *inode_block_number;//inode在第几个块
-    __U32_TYPE data_block_offset;
+    __U32_TYPE data_block_offset,index_block_offset;
     FILE *bi_fp,*l_fp;
 
     //printf("\nbaseImage:%s",base_image_path);
@@ -353,6 +355,7 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
     e_ino=malloc(inode_count*sizeof(struct ext2_inode));
     //STOP IN HHERE,TOMORROW CONTINUE!
     int inode_status=inodes_in_overlay(base_image_path,overlay_image_path,inode_block_number,inode_bytes_offset_into_inodetable,block_bits,e_ino,inode_count);
+
     for(i=0;i<inode_count;i++){
         printf("\nread inode:%d size:%d",*((*inodes)+i),e_ino[i].i_size);
         /**暂时用mode为0表示inode不在overlay中*/
@@ -372,13 +375,16 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
                     int block_status=blockInOverlay(base_image_path,overlay_image_path,data_block_offset,block_bits);
                     if(block_status==1){
                         printf("\n *********************data blocks in overlay!!!******************");
+                        sql_update_file_metadata(overlay_id,*((*inodes)+i),e_ino[i].i_mode,e_ino[i].i_dtime,2,2);
                     }else if(block_status==0){
                         printf("\n *********************data blocks in baseImage!!!******************");
+                        sql_update_file_metadata(overlay_id,*((*inodes)+i),e_ino[i].i_mode,e_ino[i].i_dtime,2,1);
                     }
                 }else if(eh->eh_depth>0 && eh->eh_entries>0){
                     //it is index node,
                     ext_idx = EXT_FIRST_INDEX(eh);
-                    printf("\n ext_idx node block:%x",(ext_idx->ei_leaf_hi<<32)+ext_idx->ei_leaf_lo);
+                    index_block_offset=(ext_idx->ei_leaf_hi<<32)+ext_idx->ei_leaf_lo;
+                    printf("\n ext_idx node block:%x",index_block_offset);
                 }
             }else{
                 printf("\n corrupt data in inode block!");
@@ -401,6 +407,9 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
             base_ino=(struct ext2_inode*)malloc(sizeof(struct ext2_inode));
             fread(base_ino,sizeof(struct ext2_inode),1,bi_fp);
             printf("\n the mode of this file:%x",base_ino->i_mode);
+
+
+            sql_update_file_metadata(overlay_id,*((*inodes)+i),base_ino->i_mode,base_ino->i_dtime,1,1);
             /*
              *for ext4,use extent tree instead of block pointer
              */
@@ -450,11 +459,11 @@ int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__
     __U64_TYPE l2_offset;
     __U64_TYPE l2_offset_into_cluster;
     __U64_TYPE data_offset;//data offset,Must be aligned to a cluster boundary.
-    char *read_backingfile_name;
+    //char *read_backingfile_name;
     bi_fp=fopen(qcow2Image,"r");
     if(bi_fp==NULL){
         printf("\n open qcow2Image failed!");
-        return -1;
+        goto fail;
     }
     /***************************读取增量镜像header结构体**************************************************/
     //header=(struct QCowHeader*)malloc(sizeof(struct QCowHeader));
@@ -462,7 +471,7 @@ int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__
     printf("\n ......");
     if(fread(&header,sizeof(struct QCowHeader),1,bi_fp)<=0){
         printf("\n read qcow2header failed!");
-        return -2;
+        goto fail;
     }
     header.version=__bswap_32(header.version);
     l1_table_offset=__bswap_64(header.l1_table_offset);
@@ -495,41 +504,52 @@ int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__
     l1_offset=l1_table_offset+(l1_index<<3);
     if(fseek(bi_fp,l1_offset,SEEK_SET)){
         printf("\n seek to l1 offset failed!");
-        return -5;
+        goto fail;
     }
     if(fread(&l2_offset,sizeof(l2_offset),1,bi_fp)<=0){
         printf("\n read the l2 offset failed!");
-        return -6;
+        goto fail;
     }
     l2_offset=__bswap_64(l2_offset) & L1E_OFFSET_MASK;
     printf("\nsize:%ld l2_offset:%x",sizeof(l2_offset),l2_offset);
 
     if(!l2_offset){
         printf("\n l2 table has not been allocated,the data must in backing file!");
-        return 0;
+        goto unallocated;
     }
     l2_offset_into_cluster=l2_offset+(l2_index<<3);
     if(fseek(bi_fp,l2_offset_into_cluster,SEEK_SET)){
         printf("\n seek to l2_offset_into_cluster failed!");
-        return -7;
+        goto fail;
     }
     if(fread(&data_offset,sizeof(data_offset),1,bi_fp)<=0){
         printf("\n read data offset failed!");
-        return -8;
+        goto fail;
     }
     data_offset=__bswap_64(data_offset);
     if(!(data_offset & L2E_OFFSET_MASK)){
         printf("\n l2 entry has not been allocated,the data must in backing file!");
-        return 0;
+        goto unallocated;
     }
     printf("\n size:%ld,the data offset:%x",sizeof(data_offset),data_offset);
+
+success:
     fclose(bi_fp);
-    free(read_backingfile_name);
+    printf("\nsuccess,leave blockInOverlay......");
+    return 1;
+    //free(read_backingfile_name);
     //free(header->autoclear_features);
     //header=NULL;
     //free(read_backingfile_name);
-    printf("\nleave blockInOverlay......");
-    return 1;
+fail:
+    fclose(bi_fp);
+    printf("\nfail,leave blockInOverlay......");
+    return -1;
+unallocated:
+    fclose(bi_fp);
+    printf("\nunallocated,leave blockInOverlay......");
+    return 0;
+
 }
 /*
  *author:liuyang
