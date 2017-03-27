@@ -2,9 +2,6 @@
 #include "include/public.h"
 int main()
 {
-    MYSQL *my_conn;
-    MYSQL_RES *res;
-    MYSQL_ROW row;
     //mtrace();
     char **image_abspath;
     char **image_id;
@@ -14,7 +11,6 @@ int main()
     /******指针空间必须在主函数中分配*******/
     image_abspath=malloc((MAX_OVERLAY_IMAGES+1)*sizeof(char *));
     image_id=malloc((MAX_OVERLAY_IMAGES+1)*sizeof(char *));
-    my_conn=mysql_init(NULL);
     /*********************************read the image path***************************************/
     if(read_host_image_name(image_abspath,image_id)<=0){
         printf("\n read image abspath failed!");

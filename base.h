@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <pthread.h>             //add the -lpthread
 
-#include <guestfs.h>            //-lguestfs
+//#include <guestfs.h>            //-lguestfs
 #include "ext2_qcow2/inode.h"
 #include "sql/sqlread.h"
 //#include <mcheck.h>

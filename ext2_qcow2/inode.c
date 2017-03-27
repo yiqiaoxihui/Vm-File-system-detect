@@ -32,6 +32,7 @@ void *multi_read_image_file(void *var){
     base_image_path=malloc(sizeof(char *));
     if(is_base_image_identical(overlay_image_id,base_image_path)<=0){
         printf("\n<<<<<<<<<in multi:overlay:%s,images are not identical,exit thread!>>>>>>>>>>\n\n\n\n\n\n\n\n\n",overlay_image_id);
+        free(base_image_path);
         pthread_exit(0);
     }
     printf("\nidentical!overlay_image_id:%s,overlay_image_path:%s,base image path:%s",overlay_image_id,overlay_image_path,*base_image_path);
@@ -41,7 +42,8 @@ void *multi_read_image_file(void *var){
     if(!mysql_real_connect(my_conn,"127.0.0.1","root","","detect",0,NULL,0)) //连接detect数据库
     {
         printf("Connect Error!n");
-        exit(1);
+        free(base_image_path);
+        pthread_exit(0);
     }
     /****************************************读取该增量镜像对应的监控文件**************************************************/
     sprintf(strsql,"select file.absPath,file.id \
@@ -49,6 +51,7 @@ void *multi_read_image_file(void *var){
             where overlays.id=file.overlayId and file.status=1 and overlays.id=%s",overlay_image_id);
     if(mysql_query(my_conn,strsql)){
         printf("\nin multi: query the image file failed!");
+        free(base_image_path);
         pthread_exit(0);
     }
     res=mysql_store_result(my_conn);
@@ -56,6 +59,7 @@ void *multi_read_image_file(void *var){
     /**该镜像无徛控文件，无需加载*/
     if(count<=0){
         printf("\n<<<<<<<<<------in multi:no file in the image,thread exit!---->>>>>>>>>>");
+        free(base_image_path);
         pthread_exit(0);
     }
     /****************************************读取该增量镜像对应的监控文件***end***********************************************/
@@ -65,6 +69,7 @@ void *multi_read_image_file(void *var){
     printf("\n****$$$$*****begin read image by libguestfs***$$$$*****");
     guestfs_add_drive(g,overlay_image_path);
     guestfs_launch(g);
+    //gues
     guestfs_mount(g,"/dev/sda1","/");
     count=0;
     /****************************************使用guestfs读取文件inode元信息，更新文件状态**************************************************/
@@ -82,7 +87,7 @@ void *multi_read_image_file(void *var){
                 printf("\nupdate the meta data of file failed!!!");
             }
             inodes[count]=gs1->st_ino;
-            printf("\nthe inodes:%d,gs1_st_ino:%d",inodes[count],gs1->st_ino);
+            printf("\nthe inodes:%ld,gs1_st_ino:%ld",inodes[count],gs1->st_ino);
             //TODO:restore file from base image
             count++;
         }else{/**该文件在镜像中不存在*/
@@ -95,18 +100,22 @@ void *multi_read_image_file(void *var){
     }
     if(count==0){
         printf("\navaliable inode of file no! leaven multi thread.......\n\n\n\n\n\n");
-        pthread_exit(NULL);
+        free(inodes);
+        free(base_image_path);
+        pthread_exit(0);
     }
-    inodes[count]=NULL;
-    for(i=0;i<count;i++)printf("\n i:%d,inode:%d",i,inodes[i]);
+    inodes[count]=0;
+    for(i=0;i<count;i++)printf("\n i:%d,inode:%ld",i,inodes[i]);
     guestfs_umount(g,"/");
     guestfs_shutdown(g);
     guestfs_close(g);
+
     mysql_close(my_conn);
     update_file_metadata(overlay_image_path,*base_image_path,&inodes,count,overlay_image_id);
     //for(i=0;inodes[i];i++)printf("\n inode %d:%d",i,inodes[i]);
     /****************************************使用guestfs读取文件inode元信息，更新文件状态***end***********************************************/
     free(base_image_path);
+    free(inodes);
     printf("\nleaven multi thread.......\n\n\n\n\n\n");
 }
 /*
@@ -128,10 +137,9 @@ int inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_offset,
     __U32_TYPE L2_BITS;
     __U64_TYPE l1_entry_offset;
     __U64_TYPE l2_table_offset;
-    __U64_TYPE l2_offset;
     __U64_TYPE l2_entry_offset;
     __U64_TYPE data_offset;//data offset,Must be aligned to a cluster boundary.
-    char *read_backingfile_name;
+    //char *read_backingfile_name;
     int i,j;
     int count;
 
@@ -142,9 +150,11 @@ int inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_offset,
         return -1;
     }
     /***************************读取增量镜像header结构体**************************************************/
-    header=(struct QCowHeader*)malloc(sizeof(struct QCowHeader*));
+    header=(struct QCowHeader*)malloc(sizeof(struct QCowHeader));
     if(fread(header,sizeof(struct QCowHeader),1,l_fp)<=0){
         printf("\n read qcow2header failed!");
+        free(header);
+        fclose(l_fp);
         return -2;
     }
     header->version=__bswap_32(header->version);
@@ -243,7 +253,10 @@ int inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_offset,
     }
 
     //free(read_backingfile_name);
+
     printf("\nleave inode_in_overlay......\n\n\n\n\n\n\n ");
+    fclose(l_fp);
+    free(header);
     return 1;
 }
 /*
@@ -253,7 +266,7 @@ int inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_offset,
  *return
  */
 int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TYPE **inodes,int inode_count,char *overlay_id){
-    printf("\n\n\n\n\n\n\n\nnin begin update_file_metadata......%d",*((*inodes)+1));
+    printf("\n\n\n\n\n\n\n\nnin begin update_file_metadata......%ld",*((*inodes)+1));
     struct ext2_super_block *es;
     struct ext2_group_desc *gdesc;
     struct ext4_extent_header *eh;
@@ -277,7 +290,7 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
     __U32_TYPE *inode_bytes_offset_into_inodetable;//inode在块内偏移字节
     __U32_TYPE *inode_block_number;//inode在第几个块
     __U32_TYPE data_block_offset,index_block_offset;
-    FILE *bi_fp,*l_fp;
+    FILE *bi_fp;
 
     //printf("\nbaseImage:%s",base_image_path);
     bi_fp=fopen(base_image_path,"r");
@@ -290,10 +303,10 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
    //offset 1M to begin
     fseek(bi_fp,Meg,SEEK_SET);
     //offset 1k to cur
-
     if(fseek(bi_fp,Kilo,SEEK_CUR)){
         printf("\n seek to super block failed!");
-        return -2;
+        fclose(bi_fp);
+        return -1;
     }
     /*
     *read the super block info
@@ -305,7 +318,9 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
 
     if(fread(es,sizeof(struct ext2_super_block),super_block,bi_fp)<=0){
         printf("\n read to super block failed!");
-        return -3;
+        free(es);
+        close(bi_fp);
+        return -1;
     }
     block_bits=10+es->s_log_block_size;
     block_size=1<<block_bits;
@@ -322,6 +337,8 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
     inode_bytes_offset_into_inodetable=malloc(inode_count*sizeof(__U32_TYPE));
     begin_block_of_inodetable=malloc(inode_count*sizeof(__U32_TYPE));
     inode_offset_in_inodetable=malloc(inode_count*sizeof(__U32_TYPE));
+    gdesc=(struct ext2_group_desc*)malloc(sizeof(struct ext2_group_desc));
+    e_ino=malloc(inode_count*sizeof(struct ext2_inode));
     /*************************开始统计inode集合的偏移信息************************************/
     for(i=0;i<inode_count;i++){
         inode_in_which_blockgroup=(*((*inodes)+i)-1)/inode_per_group;
@@ -333,10 +350,9 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
          */
         fseek(bi_fp,Meg,SEEK_SET);fseek(bi_fp,block_size,SEEK_CUR);
         fseek(bi_fp,offset_in_bg_desc,SEEK_CUR);
-        gdesc=(struct ext2_group_desc*)malloc(sizeof(struct ext2_group_desc));
         if(fread(gdesc,sizeof(struct ext2_group_desc),1,bi_fp)<=0){
             printf("\nread group descriptor entry failed!");
-            return -4;
+            goto fail;
         }
         begin_block_of_inodetable[i]=gdesc->bg_inode_table;
         /***************************由inodetable的起始块号,计算inode真正偏移块号和块内偏移***************************/
@@ -352,12 +368,15 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
         inode_block_number[i]=begin_block_of_inodetable[i]+inode_block_offset_in_inodetable;
         //printf("\n inode block offest in inodetable:%d,\n the real block number of inode%d,\n inode_bytes_offset_into_inodetable%x",inode_block_offset_in_inodetable,inode_block_number[i],inode_bytes_offset_into_inodetable[i]);
     }
-    e_ino=malloc(inode_count*sizeof(struct ext2_inode));
+
     //STOP IN HHERE,TOMORROW CONTINUE!
     int inode_status=inodes_in_overlay(base_image_path,overlay_image_path,inode_block_number,inode_bytes_offset_into_inodetable,block_bits,e_ino,inode_count);
-
+    if(inode_status<0){
+        printf("\n error:inode_in_overlay() fail!");
+        goto fail;
+    }
     for(i=0;i<inode_count;i++){
-        printf("\nread inode:%d size:%d",*((*inodes)+i),e_ino[i].i_size);
+        printf("\nread inode:%ld size:%d",*((*inodes)+i),e_ino[i].i_size);
         /**暂时用mode为0表示inode不在overlay中*/
         if(e_ino[i].i_mode!=0){
             printf("\n *****************inode in overlay,read inode from overlay successful!!!*****************");
@@ -388,7 +407,7 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
                 }
             }else{
                 printf("\n corrupt data in inode block!");
-                return -5;
+                goto fail;
             }
         }else{/**inode在原始镜像中，因此数据也在增量镜像中*/
             /*
@@ -424,16 +443,25 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
                     //695379
                     printf("\n ee block number:%d,size:%ld",data_block_offset,sizeof(data_block_offset));
 
-
                 }else if(eh->eh_depth>0 && eh->eh_entries>0){
                     //it is index node,
                     ext_idx = EXT_FIRST_INDEX(eh);
                     printf("\n ext_idx inode block:%x",(ext_idx->ei_leaf_hi<<32)+ext_idx->ei_leaf_lo);
                 }
             }//
+            free(base_ino);
         }
     }
+
+fail:
     fclose(bi_fp);
+    free(es);
+    free(inode_block_number);
+    free(inode_bytes_offset_into_inodetable);
+    free(begin_block_of_inodetable);
+    free(inode_offset_in_inodetable);
+    free(gdesc);
+    free(e_ino);
     printf("\n leave update_file_metadata.......\n\n\n\n\n\n");
     return 0;
 }
@@ -445,7 +473,7 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
 */
 int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__U16_TYPE block_bits){
     printf("\n\n\n\n\n\n\n\n\nbegin blockInOverlay.......");
-    FILE *bi_fp,*l_fp;
+    FILE *l_fp;
     QCowHeader header;
     __U32_TYPE cluster_bits;
     __U32_TYPE l1_index;
@@ -460,8 +488,8 @@ int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__
     __U64_TYPE l2_offset_into_cluster;
     __U64_TYPE data_offset;//data offset,Must be aligned to a cluster boundary.
     //char *read_backingfile_name;
-    bi_fp=fopen(qcow2Image,"r");
-    if(bi_fp==NULL){
+    l_fp=fopen(qcow2Image,"r");
+    if(l_fp==NULL){
         printf("\n open qcow2Image failed!");
         goto fail;
     }
@@ -469,7 +497,7 @@ int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__
     //header=(struct QCowHeader*)malloc(sizeof(struct QCowHeader));
 
     printf("\n ......");
-    if(fread(&header,sizeof(struct QCowHeader),1,bi_fp)<=0){
+    if(fread(&header,sizeof(struct QCowHeader),1,l_fp)<=0){
         printf("\n read qcow2header failed!");
         goto fail;
     }
@@ -480,9 +508,9 @@ int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__
     cluster_bits=__bswap_32(header.cluster_bits);
     /***************************提取原始镜像名，检查是否一致**************************************************/
 //    printf("\n the qcow2 version%d",header.version);
-//    fseek(bi_fp,header.backing_file_offset,SEEK_SET);
+//    fseek(l_fp,header.backing_file_offset,SEEK_SET);
 //    read_backingfile_name=(char *)malloc(header.backing_file_size+1);
-//    if(fgets(read_backingfile_name,header.backing_file_size+1,bi_fp)==NULL){
+//    if(fgets(read_backingfile_name,header.backing_file_size+1,l_fp)==NULL){
 //        printf("\n read backingfile name error!");
 //        return -3;
 //    }
@@ -502,11 +530,11 @@ int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__
     l2_index=cluster_offset & ((1<<l2_bits)-1);
     printf("\nblock_offset%d, cluster offset:%d,l1 index:%d,l2 index:%x,offset_into_cluster%x",block_offset,cluster_offset,l1_index,l2_index<<3,offset_into_cluster);
     l1_offset=l1_table_offset+(l1_index<<3);
-    if(fseek(bi_fp,l1_offset,SEEK_SET)){
+    if(fseek(l_fp,l1_offset,SEEK_SET)){
         printf("\n seek to l1 offset failed!");
         goto fail;
     }
-    if(fread(&l2_offset,sizeof(l2_offset),1,bi_fp)<=0){
+    if(fread(&l2_offset,sizeof(l2_offset),1,l_fp)<=0){
         printf("\n read the l2 offset failed!");
         goto fail;
     }
@@ -518,11 +546,11 @@ int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__
         goto unallocated;
     }
     l2_offset_into_cluster=l2_offset+(l2_index<<3);
-    if(fseek(bi_fp,l2_offset_into_cluster,SEEK_SET)){
+    if(fseek(l_fp,l2_offset_into_cluster,SEEK_SET)){
         printf("\n seek to l2_offset_into_cluster failed!");
         goto fail;
     }
-    if(fread(&data_offset,sizeof(data_offset),1,bi_fp)<=0){
+    if(fread(&data_offset,sizeof(data_offset),1,l_fp)<=0){
         printf("\n read data offset failed!");
         goto fail;
     }
@@ -534,7 +562,7 @@ int blockInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,__
     printf("\n size:%ld,the data offset:%x",sizeof(data_offset),data_offset);
 
 success:
-    fclose(bi_fp);
+    fclose(l_fp);
     printf("\nsuccess,leave blockInOverlay......");
     return 1;
     //free(read_backingfile_name);
@@ -542,11 +570,11 @@ success:
     //header=NULL;
     //free(read_backingfile_name);
 fail:
-    fclose(bi_fp);
+    fclose(l_fp);
     printf("\nfail,leave blockInOverlay......");
     return -1;
 unallocated:
-    fclose(bi_fp);
+    fclose(l_fp);
     printf("\nunallocated,leave blockInOverlay......");
     return 0;
 
@@ -614,6 +642,7 @@ unallocated:
             goto fail;
         }else{
             //printf("\nbaseimage and overlay image are identical!");
+            free(read_backingfile_name);
             return 1;
         }
     }else{
@@ -633,7 +662,7 @@ fail:
  *return 1:inode in overlay,0:inode in baseImage,<0:error
  */
 int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,unsigned int bytes_offset_into_block,__U16_TYPE block_bits,struct ext2_inode *inode){
-    FILE *bi_fp,*l_fp;
+    FILE *l_fp;
     QCowHeader *header;
     __U32_TYPE cluster_bits;
     __U32_TYPE l1_index;
@@ -648,16 +677,16 @@ int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,un
     __U64_TYPE l2_entry_offset_cluster;
     __U64_TYPE data_offset;//data offset,Must be aligned to a cluster boundary.
     char *read_backingfile_name;
-    bi_fp=fopen(qcow2Image,"r");
-    if(bi_fp==NULL){
+    l_fp=fopen(qcow2Image,"r");
+    if(l_fp==NULL){
         printf("\n open qcow2Image failed!");
         return -1;
     }
     /***************************读取增量镜像header结构体**************************************************/
     header=(struct QCowHeader*)malloc(sizeof(struct QCowHeader));
-    if(fread(header,sizeof(struct QCowHeader),1,bi_fp)<=0){
+    if(fread(header,sizeof(struct QCowHeader),1,l_fp)<=0){
         printf("\n read qcow2header failed!");
-        return -2;
+        goto fail;
     }
     header->version=__bswap_32(header->version);
     header->backing_file_offset=__bswap_64(header->backing_file_offset);
@@ -665,18 +694,21 @@ int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,un
     cluster_bits=__bswap_32(header->cluster_bits);
     /***************************提取原始镜像名，检查是否一致**************************************************/
     printf("\n the qcow2 version%d",header->version);
-    fseek(bi_fp,header->backing_file_offset,SEEK_SET);
-    int len=header->backing_file_size-9;
+    fseek(l_fp,header->backing_file_offset,SEEK_SET);
+
     read_backingfile_name=(char *)malloc(header->backing_file_size+1);
-    if(fgets(read_backingfile_name,header->backing_file_size+1,bi_fp)==NULL){
+    if(fgets(read_backingfile_name,header->backing_file_size+1,l_fp)==NULL){
         printf("\n read backingfile name error!");
-        return -3;
+        free(read_backingfile_name);
+        goto fail;
     }
     printf("\n size:%d,backing file name:%s,string len %ld",header->backing_file_size,read_backingfile_name,sizeof(read_backingfile_name));
     if(strstr(baseImage,read_backingfile_name)==NULL){
         printf("\n wrong overlay images!");
-        return -4;
+        free(read_backingfile_name);
+        goto fail;
     }
+    free(read_backingfile_name);
     /***************************根据块偏移映射到l1,l2表，判断该块在增量中是否分配****************************************************************/
     //the beginning 1M(256 blocks) not belongs to ext4 fs,I think.
     block_offset+=256;
@@ -689,13 +721,13 @@ int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,un
     l2_index=cluster_offset & ((1<<l2_bits)-1);
     printf("\nblock_offset%d, cluster offset:%d,l1 index:%d,l2 index:%x,offset_into_cluster%x",block_offset,cluster_offset,l1_index,l2_index<<3,offset_into_cluster);
     l1_offset=l1_table_offset+(l1_index<<3);
-    if(fseek(bi_fp,l1_offset,SEEK_SET)){
+    if(fseek(l_fp,l1_offset,SEEK_SET)){
         printf("\n seek to l1 offset failed!");
-        return -5;
+        goto fail;
     }
-    if(fread(&l2_offset,sizeof(l2_offset),1,bi_fp)<=0){
+    if(fread(&l2_offset,sizeof(l2_offset),1,l_fp)<=0){
         printf("\n read the l2 offset failed!");
-        return -6;
+        goto fail;
     }
     l2_offset=__bswap_64(l2_offset) & L1E_OFFSET_MASK;
     printf("\nsize:%ld l2_offset:%lx",sizeof(l2_offset),l2_offset);
@@ -705,13 +737,13 @@ int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,un
         return 0;
     }
     l2_entry_offset_cluster=l2_offset+(l2_index<<3);
-    if(fseek(bi_fp,l2_entry_offset_cluster,SEEK_SET)){
+    if(fseek(l_fp,l2_entry_offset_cluster,SEEK_SET)){
         printf("\n seek to l2_entry_offset_cluster failed!");
-        return -7;
+        goto fail;
     }
-    if(fread(&data_offset,sizeof(data_offset),1,bi_fp)<=0){
+    if(fread(&data_offset,sizeof(data_offset),1,l_fp)<=0){
         printf("\n read data offset failed!");
-        return -8;
+        goto fail;
     }
     data_offset=__bswap_64(data_offset);
     if(!(data_offset & L2E_OFFSET_MASK)){
@@ -725,27 +757,31 @@ int inodeInOverlay(char *baseImage,char *qcow2Image,unsigned int block_offset,un
     int count;
     count=data_offset/(1<<cluster_bits);
     printf("\n count:%d,cluster size:%d",count,1<<cluster_bits);
-    if(fseek(bi_fp,0,SEEK_SET)){
+    if(fseek(l_fp,0,SEEK_SET)){
         printf("\n seek to data_offset failed!");
-        return -9;
+        goto fail;
     }
     for(i=0;i<count;i++){
         //printf("\n************count********:%d",i);
-        if(fseek(bi_fp,1<<cluster_bits,SEEK_CUR)){
+        if(fseek(l_fp,1<<cluster_bits,SEEK_CUR)){
             printf("\n seek to data_offset failed!");
-            return -9;
+            goto fail;
         }
     }
-    if(fseek(bi_fp,offset_into_cluster+bytes_offset_into_block,SEEK_CUR)){
+    if(fseek(l_fp,offset_into_cluster+bytes_offset_into_block,SEEK_CUR)){
         printf("\n seek to data_offset failed!");
-        return -9;
+        goto fail;
     }
-    if(fread(inode,sizeof(struct ext2_inode),1,bi_fp)<=0){
+    if(fread(inode,sizeof(struct ext2_inode),1,l_fp)<=0){
         printf("\n read inode failed!");
-        return -10;
+        goto fail;
     }
-    free(read_backingfile_name);
     return 1;
+
+fail:
+    free(header);
+    return -1;
+
 }
 
 
@@ -780,22 +816,25 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
     __U32_TYPE inode_bytes_offset_into_inodetable;
     __U32_TYPE inode_block_number;
     __U32_TYPE data_block_offset;
-    FILE *bi_fp,*l_fp;
+    FILE *bi_fp;
     //printf("\nbaseImage:%s",baseImage);
     bi_fp=fopen(baseImage,"r");
     if(bi_fp==NULL){
         printf("\n error:open failed!");
         return -1;
     }
+    es=(struct ext2_super_block*)malloc(sizeof(struct ext2_super_block));
+    gdesc=(struct ext2_group_desc*)malloc(sizeof(struct ext2_group_desc));
+    e_ino=(struct ext2_inode*)malloc(sizeof(struct ext2_inode));
+
     printf("\nopen baseImage successfully!,%ld",sizeof(struct ext2_super_block));
     /***************************************************读取超级快元信息**************************************************/
    //offset 1M to begin
     fseek(bi_fp,Meg,SEEK_SET);
     //offset 1k to cur
-
     if(fseek(bi_fp,Kilo,SEEK_CUR)){
         printf("\n seek to super block failed!");
-        return -2;
+        goto fail;
     }
     /*
     *read the super block info
@@ -803,11 +842,11 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
     *must malloc zone for pointer es,es should point to a place it knows.
     *as we know no matter where the file in,the super block never change
     */
-    es=(struct ext2_super_block*)malloc(sizeof(struct ext2_super_block));
+
 
     if(fread(es,sizeof(struct ext2_super_block),super_block,bi_fp)<=0){
         printf("\n read to super block failed!");
-        return -3;
+        goto fail;
     }
     block_bits=10+es->s_log_block_size;
     block_size=1<<block_bits;
@@ -828,10 +867,10 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
      */
     fseek(bi_fp,Meg,SEEK_SET);fseek(bi_fp,block_size,SEEK_CUR);
     fseek(bi_fp,offset_in_bg_desc,SEEK_CUR);
-    gdesc=(struct ext2_group_desc*)malloc(sizeof(struct ext2_group_desc));
+
     if(fread(gdesc,sizeof(struct ext2_group_desc),1,bi_fp)<=0){
         printf("\nread group descriptor entry failed!");
-        return -4;
+        goto fail;
     }
     begin_block_of_inodetable=gdesc->bg_inode_table;
     /***************************由inodetable的起始块号,计算inode真正偏移块号和块内偏移***************************/
@@ -851,7 +890,7 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
 //    int inode_status=blockInOverlay(baseImage,qcow2Image,inode_block_number,block_bits);
 //    if(inode_status==1){
 //    printf("\n inode in overlay!");
-    e_ino=(struct ext2_inode*)malloc(sizeof(struct ext2_inode));
+
     int inode_status=inodeInOverlay(baseImage,qcow2Image,inode_block_number,inode_bytes_offset_into_inodetable,block_bits,e_ino);
     if(inode_status==1){
         //inode in the overlay
@@ -879,7 +918,7 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
             }
         }else{
             printf("\n corrupt data in inode block!");
-            return -5;
+            goto fail;
         }
 
     }else if(inode_status==0){// inode in baseImage,so the datablock must be in baseImage
@@ -896,7 +935,7 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
             //offset into the inodetable
             fseek(bi_fp,inode_offset_in_inodetable,SEEK_CUR);
             //read the inode entry,only 128 bytes for ext2,but 256 for ext4,read 128 bytes is compatibility
-            e_ino=(struct ext2_inode*)malloc(sizeof(struct ext2_inode));
+            //e_ino=(struct ext2_inode*)malloc(sizeof(struct ext2_inode));
             fread(e_ino,sizeof(struct ext2_inode),1,bi_fp);
             printf("\n the mode of this file:%x",e_ino->i_mode);
             /*
@@ -923,8 +962,18 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
     }else{
         printf("\n something error!");
     }
+
+    free(e_ino);
+    free(gdesc);
+    free(es);
     fclose(bi_fp);
     return 0;
+fail:
+    free(e_ino);
+    free(gdesc);
+    free(es);
+    fclose(bi_fp);
+    return -1;
 }
 
 

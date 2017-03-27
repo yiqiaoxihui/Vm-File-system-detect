@@ -6,6 +6,7 @@
 #include <string.h>
 #include <mysql/mysql.h>
 #include <guestfs.h>
+
 #include <pthread.h>
 
 #include "../include/public.h"
