@@ -45,7 +45,7 @@ void statistics_proportion(){
 
     }
     printf("\nall file:%.0f;\nfile in overlay:%.0f;\ninode in overlay:%0.f;\n error file:%.0f;\n",all_file_count,overlay_file_count,inode_in_overlay_file_count,error_file_count);
-    printf("\n增量文件占比:%.2f",overlay_file_count/(all_file_count-error_file_count);
+    printf("\n增量文件占比:%.2f",overlay_file_count/(all_file_count-error_file_count));
     guestfs_free_statns(gs1);
     guestfs_umount (g, "/");
     guestfs_shutdown (g);
@@ -65,7 +65,7 @@ void *multi_read_image_file(void *var){
     struct ThreadVar *threadVar=(struct ThreadVar *)var;
     char *overlay_image_id;
     char *overlay_image_path;
-    char **base_image_path;
+    char base_image_path[256];
     char strsql[256];
     MYSQL *my_conn;
     MYSQL_RES *res;
@@ -81,20 +81,17 @@ void *multi_read_image_file(void *var){
     printf("\n\n\n\n\n\n\n\n\n\nbegin multi thread.........");
     /******************************************判断原始镜像和增量镜像中的原始镜像名是否一致************************************************/
 
-    base_image_path=malloc(sizeof(char *));
     if(is_base_image_identical(overlay_image_id,base_image_path)<=0){
         printf("\n<<<<<<<<<in multi:overlay:%s,images are not identical,exit thread!>>>>>>>>>>\n\n\n\n\n\n\n\n\n",overlay_image_id);
-        free(base_image_path);
         pthread_exit(0);
     }
-    printf("\nidentical!overlay_image_id:%s,overlay_image_path:%s,base image path:%s",overlay_image_id,overlay_image_path,*base_image_path);
+    printf("\nidentical!overlay_image_id:%s,overlay_image_path:%s,base image path:%s",overlay_image_id,overlay_image_path,base_image_path);
     /******************************************判断原始镜像和增量镜像中的原始镜像名是否一致***end*********************************************/
-
     my_conn=mysql_init(NULL);
     if(!mysql_real_connect(my_conn,"127.0.0.1","root","","detect",0,NULL,0)) //连接detect数据库
     {
-        printf("Connect Error!n");
-        free(base_image_path);
+        printf("\nConnect Error!");
+        mysql_close(my_conn);
         pthread_exit(0);
     }
     /****************************************读取该增量镜像对应的监控文件**************************************************/
@@ -103,7 +100,7 @@ void *multi_read_image_file(void *var){
             where overlays.id=file.overlayId and file.status=1 and overlays.id=%s",overlay_image_id);
     if(mysql_query(my_conn,strsql)){
         printf("\nin multi: query the image file failed!");
-        free(base_image_path);
+        mysql_close(my_conn);
         pthread_exit(0);
     }
     res=mysql_store_result(my_conn);
@@ -111,7 +108,7 @@ void *multi_read_image_file(void *var){
     /**该镜像无徛控文件，无需加载*/
     if(count<=0){
         printf("\n<<<<<<<<<------in multi:no file in the image,thread exit!---->>>>>>>>>>");
-        free(base_image_path);
+        mysql_close(my_conn);
         pthread_exit(0);
     }
     /****************************************读取该增量镜像对应的监控文件***end***********************************************/
@@ -128,6 +125,7 @@ void *multi_read_image_file(void *var){
     while((row=mysql_fetch_row(res))){
         //printf("\nin multi:read from datebase the file name:%s",row[0]);
         //根据路径名获取inode等信息
+
         gs1=guestfs_statns(g,row[0]);
         if(gs1!=NULL){
             sprintf(strsql,"update file \
@@ -153,8 +151,8 @@ void *multi_read_image_file(void *var){
     }
     if(count==0){
         printf("\navaliable inode of file no! leaven multi thread.......\n\n\n\n\n\n");
+        mysql_close(my_conn);
         free(inodes);
-        free(base_image_path);
         pthread_exit(0);
     }
     inodes[count]=0;
@@ -162,12 +160,11 @@ void *multi_read_image_file(void *var){
     guestfs_umount(g,"/");
     guestfs_shutdown(g);
     guestfs_close(g);
-
     mysql_close(my_conn);
-    update_file_metadata(overlay_image_path,*base_image_path,&inodes,count,overlay_image_id);
+    update_file_metadata(overlay_image_path,base_image_path,&inodes,count,overlay_image_id);
     //for(i=0;inodes[i];i++)printf("\n inode %d:%d",i,inodes[i]);
     /****************************************使用guestfs读取文件inode元信息，更新文件状态***end***********************************************/
-    free(base_image_path);
+
     free(inodes);
     printf("\nleaven multi thread.......\n\n\n\n\n\n");
 }
@@ -282,7 +279,6 @@ int inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_offset,
         }
         count=data_offset/(1<<CLUSTER_BITS);    /**TODO偏移以64k为单位，一定能整除*/
         printf("\n count:%d,cluster size:%d",count,1<<CLUSTER_BITS);
-        printf("\n#################begin to seek################");
         for(j=0;j<count;j++){
             //printf("\n************count********:%d",i);
             if(fseek(l_fp,1<<CLUSTER_BITS,SEEK_CUR)){
@@ -295,8 +291,6 @@ int inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_offset,
             printf("\n seek to data_offset failed!");
             continue;
         }
-        printf("\n#################seek over################");
-        printf("\n#################begin to read inode################");
 
         if(fread(&inodes[i],sizeof(struct ext2_inode),1,l_fp)<=0){
             printf("\n read inode failed!");
@@ -318,7 +312,7 @@ int inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_offset,
  *detail:由inode判断文件的位置,更新文件信息
  *return
  */
-int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TYPE **inodes,int inode_count,char *overlay_id){
+int update_file_metadata(char *overlay_image_path,char base_image_path[],__U64_TYPE **inodes,int inode_count,char *overlay_id){
     printf("\n\n\n\n\n\n\n\nnin begin update_file_metadata......%ld",*((*inodes)+1));
     struct ext2_super_block *es;
     struct ext2_group_desc *gdesc;
@@ -343,9 +337,10 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
     __U32_TYPE *inode_bytes_offset_into_inodetable;//inode在块内偏移字节
     __U32_TYPE *inode_block_number;//inode在第几个块
     __U32_TYPE data_block_offset,index_block_offset;
+    __U64_TYPE begin_block_offset_of_inodetable;
     FILE *bi_fp;
 
-    //printf("\nbaseImage:%s",base_image_path);
+    printf("\nbaseImage:%s",base_image_path);
     bi_fp=fopen(base_image_path,"r");
     if(bi_fp==NULL){
         printf("\n error:open failed!");
@@ -451,6 +446,9 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
                     }else if(block_status==0){
                         printf("\n *********************data blocks in baseImage!!!******************");
                         sql_update_file_metadata(overlay_id,*((*inodes)+i),e_ino[i].i_mode,e_ino[i].i_dtime,2,1);
+                    }else{
+                        printf("\n *********************blockInOverlay fail*********************");
+                        goto fail;
                     }
                 }else if(eh->eh_depth>0 && eh->eh_entries>0){
                     //it is index node,
@@ -470,9 +468,11 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
             printf("\n ***************inode in baseImage,read inode from baseImage successful,so data must be in baseImage!!!**************");
             fseek(bi_fp,Meg,SEEK_SET);
             //seek to the inodetable block,254320,for in case of overflow.
-            for(j=0;j<begin_block_of_inodetable[i];j++){
-                fseek(bi_fp,block_size,SEEK_CUR);
-            }
+            begin_block_offset_of_inodetable=(__U64_TYPE)begin_block_of_inodetable[i]*block_size;
+//            for(j=0;j<begin_block_of_inodetable[i];j++){
+//                fseek(bi_fp,block_size,SEEK_CUR);
+//            }
+            fseek(bi_fp,begin_block_offset_of_inodetable,SEEK_CUR);
             //offset into the inodetable
             fseek(bi_fp,inode_offset_in_inodetable[i],SEEK_CUR);
             //read the inode entry,only 128 bytes for ext2,but 256 for ext4,read 128 bytes is compatibility
@@ -505,7 +505,16 @@ int update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TY
             free(base_ino);
         }
     }
-
+    free(es);
+    free(inode_block_number);
+    free(inode_bytes_offset_into_inodetable);
+    free(begin_block_of_inodetable);
+    free(inode_offset_in_inodetable);
+    free(gdesc);
+    free(e_ino);
+    fclose(bi_fp);
+    printf("\n leave update_file_metadata.......\n\n\n\n\n\n");
+    return 1;
 fail:
     fclose(bi_fp);
     free(es);
@@ -525,7 +534,7 @@ fail:
  *detail:判断增量镜像中原始镜像路径和给出名称是否一致
  *return 1:true,0:false
  */
- int is_base_image_identical(char *overlay_image_id,char **base_image_path){
+ int is_base_image_identical(char *overlay_image_id,char base_image_path[]){
     char *overlay_image_path;
     char *base_image_name;
     char strsql[256];
@@ -557,7 +566,7 @@ fail:
     if(row!=NULL){
         base_image_name=row[0];
         overlay_image_path=row[1];
-        *base_image_path=row[2];
+        strcpy(base_image_path,row[2]);
         //printf("\n<<<<<<<<<<<<<<<<<<<<<base image path:%s>>>>>>>>>>>>>>>>",*base_image_path);
         l_fp=fopen(overlay_image_path,"r");
         if(l_fp==NULL){
@@ -672,13 +681,13 @@ int blockInOverlay(char *qcow2Image,unsigned int block_offset,__U16_TYPE block_b
         printf("\n l2 table has not been allocated,the data must in backing file!");
         goto unallocated;
     }
-    printf("\n!!!!!!!!!!!!!!!seek!!!!!!!!!!!!!!l2_offset_into_cluster:%ld",l2_offset_into_cluster);
+    //printf("\n!!!!!!!!!!!!!!!seek!!!!!!!!!!!!!!l2_offset_into_cluster:%ld",l2_offset_into_cluster);
     l2_offset_into_cluster=l2_offset+(l2_index<<3);
     if(fseek(l_fp,l2_offset_into_cluster,SEEK_SET)){
         printf("\n seek to l2_offset_into_cluster failed!");
         goto fail;
     }
-    printf("\n!!!!!!!!!!!!!!!seek over!!!!!!!!!!!!!!");
+    //printf("\n!!!!!!!!!!!!!!!seek over!!!!!!!!!!!!!!");
     if(fread(&data_offset,sizeof(data_offset),1,l_fp)<=0){
         printf("\n read data offset failed!");
         goto fail;
@@ -802,7 +811,7 @@ int inodeInOverlay(char *qcow2Image,unsigned int block_offset,unsigned int bytes
     //data_offset=data_offset+offset_into_cluster+bytes_offset_into_block;
 
     if(fseek(l_fp,0,SEEK_SET)){
-        printf("\n seek to data_offset failed!");
+        printf("\n seek to SEEK_SET failed!");
         goto fail;
     }
 
