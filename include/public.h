@@ -12,5 +12,8 @@ struct ThreadVar{
     char *image_path;
 };
 
-
+float all_file_count;
+float error_file_count;
+float overlay_file_count;
+float inode_in_overlay_file_count;
 #endif // PUBLIC_H_INCLUDED
