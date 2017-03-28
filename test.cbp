@@ -34,20 +34,30 @@
 		<Linker>
 			<Add option="-lmysqlclient" />
 			<Add option="-lguestfs" />
+			<Add option="-lpthread" />
 		</Linker>
 		<Unit filename="base.h">
 			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="ext2_qcow2/inode.c">
 			<Option compilerVar="CC" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="ext2_qcow2/inode.h">
 			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
+		<Unit filename="guestfslib/MAX_PROC_NR" />
+		<Unit filename="guestfslib/Makefile.am" />
+		<Unit filename="guestfslib/Makefile.in" />
+		<Unit filename="guestfslib/guestfs-actions.pod" />
+		<Unit filename="guestfslib/guestfs-availability.pod" />
+		<Unit filename="guestfslib/guestfs-structs.pod" />
+		<Unit filename="guestfslib/guestfs.pod" />
+		<Unit filename="guestfslib/libguestfs.pc.in" />
+		<Unit filename="guestfslib/libguestfs.syms" />
 		<Unit filename="include/ext2.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="include/public.h">
 			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="include/qcow2.h">
@@ -58,9 +68,6 @@
 		</Unit>
 		<Unit filename="sql/sqlread.c">
 			<Option compilerVar="CC" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="sql/sqlread.h">
 			<Option target="&lt;{~None~}&gt;" />
