@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1490705838 source:/home/heaven/Documents/C/test/main.c
+1491480700 source:/home/heaven/Documents/C/test/main.c
 	"base.h"
 	"include/public.h"
 
@@ -128,7 +128,7 @@
 1489058542 /home/heaven/Documents/C/test/ext2_qcow2/inode.c
 	"../include/ext2.h"
 
-1490709824 /home/heaven/Documents/C/test/ext2_qcow2/inode.h
+1491535064 /home/heaven/Documents/C/test/ext2_qcow2/inode.h
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
@@ -140,8 +140,9 @@
 	"../include/qcow2.h"
 	"../sql/sqlread.h"
 
-1490709784 source:/home/heaven/Documents/C/test/ext2_qcow2/inode.c
+1491556551 source:/home/heaven/Documents/C/test/ext2_qcow2/inode.c
 	"inode.h"
+	<sys/stat.h>
 
 1490283422 source:/home/heaven/Documents/C/test/ext2_qcow2/inode.h
 	"../include/ext2.h"
@@ -191,7 +192,7 @@
 1490317482 source:/home/heaven/Documents/C/test/sql/sqlread.h
 	<mysql/mysql.h>
 
-1490685483 /home/heaven/Documents/C/test/include/public.h
+1491548205 /home/heaven/Documents/C/test/include/public.h
 
 1490608778 /home/heaven/Documents/C/test/lib/guestfs.h
 	<stddef.h>

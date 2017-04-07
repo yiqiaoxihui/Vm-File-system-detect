@@ -17,7 +17,7 @@
 #define Kilo 1024//1K bytes
 #define Meg 1048576//1M bytes
 
-int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode);
+int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode,char *filepath);
 
 int test(char *baseImage,char *qcow2Image,unsigned int inode);
 

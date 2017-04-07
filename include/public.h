@@ -14,6 +14,13 @@ struct ThreadVar{
 
 float all_file_count;
 float error_file_count;
-float overlay_file_count;
+int overlay_file_count;
 float inode_in_overlay_file_count;
+float read_error;
+
+int blockInOverlay_error;
+int inodeInOverlay_error;
+int magic_error;
+
+char overlay_filepath[3000][256];//TODO,
 #endif // PUBLIC_H_INCLUDED

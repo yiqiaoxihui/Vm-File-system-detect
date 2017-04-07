@@ -1,20 +1,29 @@
 
 //#include "inode.h"
 //#include <mysql/mysql.h>
-#include "inode.h"
 
+#include "inode.h"
+#include <sys/stat.h>
 void statistics_proportion(){
+    int i;
+    blockInOverlay_error=0;
+    inodeInOverlay_error=0;
+    magic_error=0;
+
     all_file_count=0;
     error_file_count=0;
     overlay_file_count=0;
     inode_in_overlay_file_count=0;
+    read_error=0;
     __U32_TYPE inode_number;
-    FILE *fp;
+    FILE *fp,*fp1,*fp2;
     char line[256];
     struct guestfs_statns *gs1;
-
-    fp=fopen("/home/heaven/Downloads/allpath.txt","r");
-
+    char *md5str;
+    fp=fopen("/home/heaven/Downloads/truepath.txt","r");
+    //fp1=fopen("/home/heaven/Downloads/truepath.txt","w");
+    /*only in overlay files*/
+    //fp2=fopen("/home/heaven/Downloads/overlay_file.txt","w");
     if(fp==NULL){
         printf("\n open allpath fail!");
         exit(0);
@@ -23,34 +32,65 @@ void statistics_proportion(){
 //    line[strlen(line)-1]='\0';
 //    printf("%s,%d",line,strlen(line));
     guestfs_h *g=guestfs_create();
-    guestfs_add_drive(g,"/var/lib/libvirt/images/snap2.img");
+    guestfs_add_drive(g,"/var/lib/libvirt/images/snap1.img");
     guestfs_launch(g);
     guestfs_mount_ro(g,"/dev/sda1","/");
     while(!feof(fp)){
         all_file_count++;
         fgets(line,256,fp);
         line[strlen(line)-1]='\0';
+//        printf("\nfile path:%s",line);
+//        gs1=guestfs_lstatns(g,line);
+//        if(gs1==NULL){
+//            continue;
+//        }
+//        if(S_ISREG(gs1->st_mode)!=1){
+//            continue;
+//        }
+//        printf("\nfile type:%x",gs1->st_mode);
+//        md5str=guestfs_checksum(g,"md5",line);
+//        if(md5str==NULL){
+//            continue;
+//        }
+//        printf("\nmd5:%s",md5str);
+        //line="/home/base/allpath.txt";
+        //md5str=guestfs_checksum(g,md5,line);
         gs1=guestfs_lstatns(g,line);
         if(gs1==NULL){
-            printf("\nerror file count:%.0f",error_file_count);
+            printf("\nthe file not exist:%.0f",error_file_count);
             error_file_count++;
             continue;
         }
+//        line[strlen(line)]='\n';
+//        fputs(line,fp1);
         inode_number=gs1->st_ino;
 
-        printf("\nall file number:%.0f",all_file_count);
+        printf("\nall file number in VM:%.0f",all_file_count);
 
-        which_images_by_inode("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap2.img",inode_number);
+        which_images_by_inode("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap1.img",inode_number,line);
         //break;
 
     }
-    printf("\nall file:%.0f;\nfile in overlay:%.0f;\ninode in overlay:%0.f;\n error file:%.0f;\n",all_file_count,overlay_file_count,inode_in_overlay_file_count,error_file_count);
-    printf("\n增量文件占比:%.2f",overlay_file_count/(all_file_count-error_file_count));
+//    for(i=0;i<overlay_file_count;i++){
+//        md5str=guestfs_checksum(g,"md5",overlay_filepath[i]);
+//        if(md5str==NULL){
+//            continue;
+//        }
+//        printf("\nmd5:%s|file in overlay:%s",md5str,overlay_filepath[i]);
+//        //fputs(overlay_filepath[i],fp2);
+//        //fputc('\n',fp2);
+//    }
+    printf("\nall file:%.0f;\nfile in overlay:%d;\ninode in overlay:%0.f;\nerror file:%.0f;\n",all_file_count,overlay_file_count,inode_in_overlay_file_count,error_file_count);
+    printf("\nread_error:%0.f;\nblockInOverlay error:%d;\ninodeInOverlay:%d;\nmagic_error:%d\n",read_error,blockInOverlay_error,inodeInOverlay_error,magic_error);
+    printf("\n增量文件占比:%.5f\%",(((float)overlay_file_count)/(all_file_count-error_file_count-read_error))*100);
     guestfs_free_statns(gs1);
     guestfs_umount (g, "/");
     guestfs_shutdown (g);
     guestfs_close (g);
     fclose(fp);
+    //fclose(fp2);
+    //fclose(fp1);
+    //free(md5str);
 }
 
 
@@ -847,7 +887,7 @@ int inodeInOverlay(char *qcow2Image,unsigned int block_offset,unsigned int bytes
 fail:
     fclose(l_fp);
     free(header);
-    printf("\nleave inodeInOverlay........\n\n\n\n");
+    printf("\nfail,leave inodeInOverlay........\n\n\n\n");
     return -1;
 
 }
@@ -860,7 +900,7 @@ fail:
 *param:char * base image;char * qcow2 image;int inode
 *return int
 */
-int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
+int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode,char *filepath){
     struct ext2_super_block *es;
     struct ext2_group_desc *gdesc;
     struct ext4_extent_header *eh;
@@ -976,10 +1016,13 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
                 if(block_status==0){
                     //printf("\n *********************data blocks in baseImage!!!******************");
                 }else if(block_status==1){
+                    //overlay_filepath[overlay_file_count]=malloc(strlen(filepath));
+                    strcpy(overlay_filepath[overlay_file_count],filepath);
                     overlay_file_count++;
                     //printf("\n *********************data blocks in overlay!!!******************");
                 }else{
                     printf("\n *********************blockInOverlay fail*********************");
+                    blockInOverlay_error;
                     goto fail;
                 }
             }else if(eh->eh_depth>0 && eh->eh_entries>0){
@@ -988,20 +1031,24 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
                 ext_idx = EXT_FIRST_INDEX(eh);
                 index_block_offset=(ext_idx->ei_leaf_hi<<32)+ext_idx->ei_leaf_lo;
                 //printf("\n.......there is a ext_idx node block:%x",index_block_offset);
-                block_status=blockInOverlay(qcow2Image,data_block_offset,block_bits);
+                block_status=blockInOverlay(qcow2Image,index_block_offset,block_bits);
                 if(block_status==0){
                     //printf("\n *********************index block in base,so data blocks in baseImage !!!******************");
                 }else if(block_status==1){
+                    //overlay_filepath[overlay_file_count]=malloc(strlen(filepath));
+                    strcpy(overlay_filepath[overlay_file_count],filepath);
                     overlay_file_count++;
                     //printf("\n *********************index block in overlay,so data blocks in overlay!!!******************");
                 }else{
                     printf("\n *********************blockInOverlay fail*********************");
+                    blockInOverlay_error++;
                     goto fail;
                 }
 
             }
         }else{
             //printf("\n corrupt data in inode block!");
+            magic_error++;
             goto fail;
         }
     }else if(inode_status==0){// inode in baseImage,so the datablock must be in baseImage
@@ -1045,8 +1092,10 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode){
 //            }//
     }else{
         printf("\n inodeInOverlay error!");
+        inodeInOverlay_error++;
         goto fail;
     }
+
     free(e_ino);
     free(gdesc);
     free(es);
@@ -1057,7 +1106,8 @@ fail:
     free(gdesc);
     free(es);
     fclose(bi_fp);
-    error_file_count++;//
+    read_error++;
+    //error_file_count++;//
     printf("\nerror_file_count:%.0f",error_file_count);
     return -1;
 }
