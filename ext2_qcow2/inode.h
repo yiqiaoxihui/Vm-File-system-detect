@@ -35,4 +35,6 @@ int update_file_metadata(char *overlay_image_path,char base_image_path[],__U64_T
 
 
 void statistics_proportion();
+
+void allfile_md5();
 #endif // __INODE_H_INCLUDED

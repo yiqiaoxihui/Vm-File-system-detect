@@ -4,6 +4,57 @@
 
 #include "inode.h"
 #include <sys/stat.h>
+void allfile_md5(){
+    FILE *fp;
+    char line[256];
+    struct guestfs_statns *gs1;
+    char *md5str;
+    unsigned long int md5num=0;
+    fp=fopen("/home/heaven/Downloads/truepath.txt","r");
+    //fp1=fopen("/home/heaven/Downloads/truepath.txt","w");
+    /*only in overlay files*/
+    //fp2=fopen("/home/heaven/Downloads/overlay_file.txt","w");
+    if(fp==NULL){
+        printf("\n open allpath fail!");
+        exit(0);
+    }
+//    fgets(line,256,fp);
+//    line[strlen(line)-1]='\0';
+//    printf("%s,%d",line,strlen(line));
+    guestfs_h *g=guestfs_create();
+    guestfs_add_drive(g,"/var/lib/libvirt/images/snap1.img");
+    guestfs_launch(g);
+    guestfs_mount_ro(g,"/dev/sda1","/");
+    while(!feof(fp)){
+        all_file_count++;
+        fgets(line,256,fp);
+        line[strlen(line)-1]='\0';
+        printf("\nfile path:%s",line);
+        gs1=guestfs_lstatns(g,line);
+        if(gs1==NULL){
+            continue;
+        }
+        if(S_ISREG(gs1->st_mode)!=1){
+            continue;
+        }
+        printf("\nfile type:%x",gs1->st_mode);
+        md5str=guestfs_checksum(g,"md5",line);
+        if(md5str==NULL){
+            continue;
+        }
+        md5num++;
+        printf("\nmd5:%s",md5str);
+
+        //break;
+    }
+    printf("\nall file number in VM:%.0f,the md5 file:%ld",all_file_count,md5num);
+    guestfs_free_statns(gs1);
+    guestfs_umount (g, "/");
+    guestfs_shutdown (g);
+    guestfs_close (g);
+    fclose(fp);
+}
+
 void statistics_proportion(){
     int i;
     blockInOverlay_error=0;

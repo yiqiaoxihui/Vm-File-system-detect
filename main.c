@@ -42,8 +42,8 @@ int main()
 //    free(image_id);
 //    free(threadVar);
 //    free(read_image_thread);
-
-    statistics_proportion();
+    allfile_md5();
+    //statistics_proportion();
     return 0;
 }
 
