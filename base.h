@@ -13,7 +13,7 @@
 #include <mysql/mysql.h>        //-lmysqlclient
 
 
-#define MAX_OVERLAY_IMAGES 10
+#define MAX_OVERLAY_IMAGES 20
 
 
 

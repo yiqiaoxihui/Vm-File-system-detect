@@ -28,7 +28,7 @@
     //read server host name and host id
     if(gethostname(hostName,sizeof(hostName))){
         perror("gethostname!");
-        return -1;
+        goto fail0;
     }
     hostId=gethostid();
     //查询数据库中是否有该服务器
@@ -38,23 +38,23 @@
     if(mysql_query(my_conn,strsql)) //连接baseImages表
     {
         printf("Query Error,query server failed!n");
-        return -1;
+        goto fail0;
     }
     res=mysql_store_result(my_conn); //取得表中的数据并存储到res中,mysql_use_result
     count=mysql_num_rows(res);
     if(count<=0){//
         printf("\n error:the server not exist!");
-        return 0;
+        goto fail0;
     }else if(count>1){
         printf("\n error:the server id repeat!");
-        return -2;
+        goto fail0;
     }else{
         row=mysql_fetch_row(res);//打印结果
         int host_status=atoi(row[2]);
         //host status
         if(host_status!=1){
             printf("\n the host stop detecting!");
-            return -3;
+            goto fail0;
         }
         serverId=atoi(row[0]);
         printf("\n host_status:%d,serverId:%d",host_status,serverId);
@@ -68,14 +68,14 @@
     //printf("******************strsql***************:%s",strsql);
     if(mysql_query(my_conn,strsql)){
         printf("Query Error,query server images failed!n");
-        return -1;
+        goto fail0;
     }
     res=mysql_store_result(my_conn);
     count=mysql_num_rows(res);
     printf("\n count:%d",count);
     if(count<=0){
         printf("\n no images in the host!");
-        return -4;
+        goto fail0;
     }
     //char *baseImages[count];
     baseImages=malloc(count * sizeof(char *));
@@ -85,6 +85,7 @@
         baseImage_status=atoi(row[1]);
         if(baseImage_status==1){
             /**注意row[0]是char*类型，因此无需取地址*/
+            printf("the normally base image len:%d",strlen(row[0]));
             baseImages[count]=row[0];
             /*为了使用mysql中in关键字*/
             strcat(str_baseImages_id,row[2]);
@@ -97,7 +98,7 @@
             sprintf(strsql,"UPDATE baseImages SET status=1 WHERE id=%s",row[2]);
             if(mysql_query(my_conn,strsql)){
                 printf("Query Error,update baseImages status failed!");
-                return -1;
+                goto fail;
             }
         }
         if(baseImage_status==0){continue;};
@@ -116,14 +117,14 @@
         //printf("******************strsql***************:%s",strsql);
         if(mysql_query(my_conn,strsql)){
             printf("\nQuery Error,query overlay images failed!");
-            return -1;
+            goto fail;
         }
         res=mysql_store_result(my_conn);
         count=mysql_num_rows(res);
-        printf("\n overlay images count:%d",count);
+        printf("\n all overlay images count:%d",count);
         if(count<=0){
             printf("\n no overlay images in the server!");
-            return -5;
+            goto fail;
         }
         //image_abspath=malloc((count+1) * sizeof(char *));
         count=0;
@@ -142,7 +143,7 @@
                 sprintf(strsql,"UPDATE overlays SET status=1 WHERE id=%s",row[2]);
                 if(mysql_query(my_conn,strsql)){
                     printf("Query Error,update baseImages status failed!");
-                    return -1;
+                    goto fail;
                 }
             }
             if(overlayImage_status==0){continue;};
@@ -151,13 +152,16 @@
         image_id[count]=NULL;
     }else{
         printf("\n no overlay image status is 1");
-        return -6;
-    }
-    for(i=0;image_abspath[i];i++){
-        printf("\n test the overlay images path:%s,id:%s",image_abspath[i],image_id[i]);
+        goto fail;
     }
     /**没有可用的镜像*/
-    if(image_id[0]==NULL){return 0;};
+    if(image_id[0]==NULL){
+        goto back;
+    };
+    for(i=0;image_abspath[i];i++){
+        printf("\n test all the overlay images path:%s,id:%s",image_abspath[i],image_id[i]);
+    }
+
     //printf("\nsize of imagePath:%d",sizeof(image_abspath));
     /*******************************************read overlay images by the host images id***end******************************************/
 
@@ -182,8 +186,19 @@
 //    }
     mysql_close(my_conn);
     free(baseImages);
-    printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^^^^^^^^^^^^^^^^^^^^^^");
+    printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^1^^^^^^^^^^^^^^^^^^^^^");
     return 1;
+back:
+    mysql_close(my_conn);
+    free(baseImages);
+    printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^0^^^^^^^^^^^^^^^^^^^^^");
+    return 0;
+fail:
+    free(baseImages);
+fail0:
+    mysql_close(my_conn);
+    printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^-1^^^^^^^^^^^^^^^^^^^^^");
+    return -1;
  }
 /*
  *author:liuyang
