@@ -14,7 +14,7 @@
     int i;
     int serverId;
     int baseImage_status,overlayImage_status;
-    char **baseImages;
+    //char *baseImages;
     MYSQL *my_conn;
     MYSQL_RES *res;
     MYSQL_ROW row;
@@ -78,26 +78,27 @@
         goto fail0;
     }
     //char *baseImages[count];
-    baseImages=malloc(count * sizeof(char *));
+    //baseImages=malloc(count * sizeof(char));
     count=0;
-    char str_baseImages_id[128];
+    char str_baseImages_id[128]={NULL};
     while((row=mysql_fetch_row(res))){
         baseImage_status=atoi(row[1]);
         if(baseImage_status==1){
             /**注意row[0]是char*类型，因此无需取地址*/
-            printf("the normally base image len:%d",strlen(row[0]));
-            baseImages[count]=row[0];
+            //printf("\nthe normally base image len:%d",strlen(row[0]));
+            //baseImages[count]=row[0];
             /*为了使用mysql中in关键字*/
+            printf("\nthe str_baseimages_id:%s",str_baseImages_id);
             strcat(str_baseImages_id,row[2]);
             strcat(str_baseImages_id,",");
             //baseImages[i]=strdup(baseImages[i]);
-            printf("\n the base image path:%s",baseImages[count]);
+            printf("\n the status=1 base image path:%s",row[0]);
             count++;
         }
         if(baseImage_status==2){
             sprintf(strsql,"UPDATE baseImages SET status=1 WHERE id=%s",row[2]);
             if(mysql_query(my_conn,strsql)){
-                printf("Query Error,update baseImages status failed!");
+                printf("\nQuery Error,update baseImages status failed!");
                 goto fail;
             }
         }
@@ -107,23 +108,23 @@
     /**************************************************find the base images****end***************************************************/
     /************************************************read overlay images by the host images id****************************************/
     if(count>0){
-        printf("\n str_baseImages_id:%d,content:%s",strlen(str_baseImages_id),str_baseImages_id);
+        //printf("\n str_baseImages_id:%d,content:%s",strlen(str_baseImages_id),str_baseImages_id);
         /*去除最后一位逗号*/
         str_baseImages_id[strlen(str_baseImages_id)-1]='\0';
         printf("\n content:%s",str_baseImages_id);
         sprintf(strsql,"select overlays.absPath,overlays.status,overlays.id \
                 from overlays join baseImages \
                 where baseImages.id=overlays.baseImageId and baseImages.id in(%s)",str_baseImages_id);
-        //printf("******************strsql***************:%s",strsql);
+        printf("\n******************strsql***************:%s",strsql);
         if(mysql_query(my_conn,strsql)){
             printf("\nQuery Error,query overlay images failed!");
             goto fail;
         }
         res=mysql_store_result(my_conn);
         count=mysql_num_rows(res);
-        printf("\n all overlay images count:%d",count);
+        printf("\nall overlay images count:%d",count);
         if(count<=0){
-            printf("\n no overlay images in the server!");
+            printf("\nno overlay images in the server!");
             goto fail;
         }
         //image_abspath=malloc((count+1) * sizeof(char *));
@@ -133,16 +134,20 @@
             //printf("\n overlay image status:%d",overlayImage_status);
             if(overlayImage_status==1){
                 /**注意row[0]是char*类型，因此无需取地址*/
-                image_abspath[count]=row[0];
-                image_id[count]=row[2];
+                image_abspath[count]=malloc(strlen(row[0])+1);
+                image_id[count]=malloc(strlen(row[2])+1);
+                strcpy(image_abspath[count],row[0]);
+                strcpy(image_id[count],row[2]);
+                //image_abspath[count]=row[0];
+                //image_id[count]=row[2];
                 //baseImages[i]=strdup(baseImages[i]);
-                printf("\n status is 1,the overlay image path:%s",image_abspath[count]);
+                printf("\nstatus is 1,the overlay image path:%s",image_abspath[count]);
                 count++;
             }
             if(overlayImage_status==2){
                 sprintf(strsql,"UPDATE overlays SET status=1 WHERE id=%s",row[2]);
                 if(mysql_query(my_conn,strsql)){
-                    printf("Query Error,update baseImages status failed!");
+                    printf("\nQuery Error,update baseImages status failed!");
                     goto fail;
                 }
             }
@@ -159,42 +164,22 @@
         goto back;
     };
     for(i=0;image_abspath[i];i++){
-        printf("\n test all the overlay images path:%s,id:%s",image_abspath[i],image_id[i]);
+        printf("\ntest all the overlay images path:%s,id:%s",image_abspath[i],image_id[i]);
     }
 
     //printf("\nsize of imagePath:%d",sizeof(image_abspath));
     /*******************************************read overlay images by the host images id***end******************************************/
-
-    //test mysql_fetch_fields,mysql_num_fields
-//    int num_fields = mysql_num_fields(res);
-//    MYSQL_FIELD *fields = mysql_fetch_fields(res);
-//    for(i = 0; i < num_fields; i++)
-//    {
-//       printf("Field %u is %s\n", i, fields[i].name);
-//    }
-//    int num_fields = mysql_num_fields(res);
-//    while ((row = mysql_fetch_row(res)))
-//    {
-//       unsigned long *lengths;
-//       lengths = mysql_fetch_lengths(res);
-//       for(i = 0; i < num_fields; i++)
-//       {
-//           printf("[%.*s] ", (int) lengths[i],
-//                  row[i] ? row[i] : "NULL");
-//       }
-//       printf("\n");
-//    }
     mysql_close(my_conn);
-    free(baseImages);
+    //free(baseImages);
     printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^1^^^^^^^^^^^^^^^^^^^^^");
     return 1;
 back:
     mysql_close(my_conn);
-    free(baseImages);
+    //free(baseImages);
     printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^0^^^^^^^^^^^^^^^^^^^^^");
     return 0;
 fail:
-    free(baseImages);
+    //free(baseImages);
 fail0:
     mysql_close(my_conn);
     printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^-1^^^^^^^^^^^^^^^^^^^^^");
