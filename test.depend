@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1491666443 source:/home/heaven/Documents/C/test/main.c
+1492354637 source:/home/heaven/Documents/C/test/main.c
 	"base.h"
 	"include/public.h"
 
@@ -128,7 +128,7 @@
 1489058542 /home/heaven/Documents/C/test/ext2_qcow2/inode.c
 	"../include/ext2.h"
 
-1491901138 /home/heaven/Documents/C/test/ext2_qcow2/inode.h
+1492344447 /home/heaven/Documents/C/test/ext2_qcow2/inode.h
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
@@ -140,7 +140,7 @@
 	"../include/qcow2.h"
 	"../sql/sqlread.h"
 
-1491905232 source:/home/heaven/Documents/C/test/ext2_qcow2/inode.c
+1492344401 source:/home/heaven/Documents/C/test/ext2_qcow2/inode.c
 	"inode.h"
 	<sys/stat.h>
 
@@ -165,14 +165,16 @@
 1490283100 /home/heaven/Documents/C/test/sql/csql.h
 	<mysql/mysql.h>
 
-1491660091 /home/heaven/Documents/C/test/base.h
+1492354000 /home/heaven/Documents/C/test/base.h
 	<stdio.h>
 	<unistd.h>
+	<sys/stat.h>
 	<stdlib.h>
 	<pthread.h>
-	"ext2_qcow2/inode.h"
+	"ext2_qcow2/ext2_main.h"
 	"sql/sqlread.h"
 	<mysql/mysql.h>
+	"ntfs_qcow2/ntfs_main.h"
 
 1490317815 source:/home/heaven/Documents/C/test/base.h
 	<stdio.h>
@@ -203,4 +205,33 @@
 	<stddef.h>
 	<stdint.h>
 	<stdarg.h>
+
+1492354595 source:/home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.c
+	"ntfs_main.h"
+
+1492351597 /home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.h
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<mysql/mysql.h>
+	<guestfs.h>
+	"../include/ntfs.h"
+
+1492345767 /home/heaven/Documents/C/test/ext2_qcow2/ext2_main.h
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<mysql/mysql.h>
+	<guestfs.h>
+	<pthread.h>
+	"../include/public.h"
+	"../include/ext2.h"
+	"../include/qcow2.h"
+	"../sql/sqlread.h"
+
+1492351225 source:/home/heaven/Documents/C/test/ext2_qcow2/ext2_main.c
+	"ext2_main.h"
+
+1492353231 /home/heaven/Documents/C/test/include/ntfs.h
+	<asm/byteorder.h>
 
