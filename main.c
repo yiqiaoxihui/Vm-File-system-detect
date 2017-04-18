@@ -9,7 +9,7 @@ int main()
 
     {   /**for test ntfs*/
         unsigned long int inodes[2]={5625,10720};
-        ntfs_update_file_metadata("/var/lib/libvirt/images/winxp_snap1.img","/var/lib/libvirt/images/winxp.img",inodes,2,11);
+        ntfs_update_file_metadata("/var/lib/libvirt/images/winxp_snap1.img","/var/lib/libvirt/images/winxp.img",10720,1,11);
     }
 
     //allfile_md5();

@@ -293,7 +293,8 @@ int ext2_inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_of
         blocks_bytes_into_cluster=block_into_cluster<<BLOCK_BITS;           /**cluster块偏移的字节数*/
         l1_index=cluster_offset>>L2_BITS;                                   /**l1表的偏移项数*/
         l2_index=cluster_offset & ((1<<L2_BITS)-1);                         /**l2表的偏移项数*/
-        printf("\nblock_offset%d,\ncluster offset:%d,\nl1 index:%d,l2 index:%x,\nblocks_bytes_into_cluster%x",block_offset[i],cluster_offset,l1_index,l2_index<<3,blocks_bytes_into_cluster);
+        printf("\nblock_offset%d,\ncluster offset:%d,\nl1 index:%d,l2 index:%x,\nblocks_bytes_into_cluster%x",
+                        block_offset[i],cluster_offset,l1_index,l2_index,blocks_bytes_into_cluster);
         l1_entry_offset=L1_TABLE_OFFSET+(l1_index<<3);
         if(fseek(l_fp,l1_entry_offset,SEEK_SET)){
             printf("\n seek to l1 offset failed!");
@@ -336,7 +337,7 @@ int ext2_inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_of
         printf("\nsize:%ld,the data offset:%x",sizeof(data_offset),data_offset);
 
         if(fseek(l_fp,0,SEEK_SET)){
-            printf("\n seek to data_offset failed!");
+            printf("\n seek to SEEK_SET failed!");
             inodes[i].i_mode=0;
             inodes[i].i_block[0]=0;
             continue;

@@ -142,6 +142,7 @@ typedef __S64_TYPE ntfs_s64;
 #endif /* __BIG_ENDIAN */
 #endif /* __LITTLE_ENDIAN */
 #endif /* __cpu_to_le16 */
+
 #define NTFS_GETU8(p)      (*(ntfs_u8*)(p))
 #define NTFS_GETU16(p)     ((ntfs_u16)LE16_TO_CPU(*(ntfs_u16*)(p)))
 #define NTFS_GETU24(p)     ((ntfs_u32)NTFS_GETU16(p) | ((ntfs_u32)NTFS_GETU8(((char*)(p))+2)<<16))
