@@ -15,7 +15,8 @@ int ntfs_update_file_metadata(char *overlay_image_path,char *base_image_path,__U
     int in_overlay;
     bi_fp=fopen(base_image_path,"r");
     ntfs_attribute *attr;
-    __U64_TYPE data_offset;
+    __U32_TYPE data_cluster_offset;
+    __U16_TYPE ntfs_cluster_bits;
     if(bi_fp==NULL){
         printf("\n error:open ntfs image failed!");
         return -1;
@@ -61,7 +62,27 @@ int ntfs_update_file_metadata(char *overlay_image_path,char *base_image_path,__U
         attr=ntfs_find_attr(&ino,ino.vol->at_data,0);
         if(attr){
             if(attr->resident==0){
+                printf("\非常驻80属性，文件内容在run list 中");
                 printf("\nsuccessful!the runlist number:%d,cluster:%x",attr->d.r.len,attr->d.r.runlist[0].cluster);
+                if(attr->d.r.len>0){
+                    data_cluster_offset=attr->d.r.runlist[0].cluster;
+                    /*all bit-1*/
+                    BIT_1_POS(ino.vol->clustersize,ntfs_cluster_bits);
+                    printf("\ndata_cluster_offset:%x,%d;\nthe ntfs_cluster_bits:%d",
+                           data_cluster_offset,data_cluster_offset,ntfs_cluster_bits);
+                    in_overlay=ntfs_blockInOverlay(overlay_image_path,data_cluster_offset,ntfs_cluster_bits);
+                    if(in_overlay==0){
+                        printf("\n*******************:data in overlay not been allocated!");
+                    }else if(in_overlay==1){
+                        //TODO update file info
+                        printf("\n*******************:data in overlay  been allocated!");
+                    }else{
+                        printf("\n*******************:ntfs_blockInOverlay ERROR!");
+                    }
+                }else{
+                    printf("\nntfs_update_file_metadata:run list problem!");
+                }
+
             }
         }
     }else{
@@ -72,6 +93,109 @@ int ntfs_update_file_metadata(char *overlay_image_path,char *base_image_path,__U
 fail:
     fclose(bi_fp);
     return -1;
+}
+/*
+*author:liuyang
+*date  :2017/4/19
+*detail:根据块偏移判断是否在增量中分配
+*return:int 1:inode in overlay,0:inode in baseImage,<0:error
+*/
+int ntfs_blockInOverlay(char *qcow2Image,unsigned int block_offset,__U16_TYPE block_bits){
+    printf("\n\n\n\n\n\n\n\n\nbegin ntfs_blockInOverlay.......");
+    FILE *l_fp;
+    QCowHeader header;
+    __U32_TYPE cluster_bits;
+    __U32_TYPE CLUSTER_BYTES;
+    __U32_TYPE l1_index;
+    __U32_TYPE l2_index;
+    __U64_TYPE l1_table_offset;
+    __U32_TYPE cluster_offset;
+    __U32_TYPE block_into_cluster;
+    __U32_TYPE bytes_into_cluster;
+    __U32_TYPE l2_bits;
+    __U64_TYPE l1_offset;
+    __U64_TYPE l2_offset;
+    __U64_TYPE l2_offset_into_cluster;
+    __U64_TYPE data_offset;//data offset,Must be aligned to a cluster boundary.
+    //char *read_backingfile_name;
+    //printf("\n ext2_blockInOverlay fopen......");
+    l_fp=fopen(qcow2Image,"r");
+    //printf("\n ext2_blockInOverlay fopen comp......");
+    if(l_fp==NULL){
+        printf("\n in ext2_blockInOverlay,open qcow2Image failed!");
+        return -1;
+    }
+    /***************************读取增量镜像header结构体**************************************************/
+    //header=(struct QCowHeader*)malloc(sizeof(struct QCowHeader));
+
+    //printf("\n ext2_blockInOverlay header......");
+    if(fread(&header,sizeof(struct QCowHeader),1,l_fp)<=0){
+        printf("\n read qcow2header failed!");
+        goto fail;
+    }
+    l1_table_offset=__bswap_64(header.l1_table_offset);
+    cluster_bits=__bswap_32(header.cluster_bits);
+    CLUSTER_BYTES=1<<cluster_bits;
+    l2_bits=cluster_bits-3;
+    /*******************************************根据块偏移映射到l1,l2表，判断该块在增量中是否分配************************************************/
+    //cluster_offset=block_offset/(1<<(cluster_bits-block_bits));
+    printf("\n*cluster offset:%f",(float)NTFS_OFFSET/(1<<cluster_bits));
+    cluster_offset=block_offset/(1<<(cluster_bits-block_bits))+(float)NTFS_OFFSET/(1<<cluster_bits);
+    printf("\n*cluster offset:%d",cluster_offset);
+    //block_into_cluster=block_offset%(1<<(cluster_bits-block_bits));
+    bytes_into_cluster=(((block_offset%CLUSTER_BYTES)*((1<<block_bits)%CLUSTER_BYTES))%CLUSTER_BYTES +
+                         NTFS_OFFSET%CLUSTER_BYTES)%CLUSTER_BYTES;
+    l1_index=cluster_offset>>l2_bits;
+    l2_index=cluster_offset & ((1<<l2_bits)-1);
+    printf("\nblock_offset%d;\ncluster offset:%d;\nl1 index:%d;\nl2 index:%x,bytes_into_cluster:%x",
+                                            block_offset,cluster_offset,l1_index,l2_index<<3,bytes_into_cluster);
+    l1_offset=l1_table_offset+(l1_index<<3);
+    if(fseek(l_fp,l1_offset,SEEK_SET)){
+        printf("\n seek to l1 offset failed!");
+        goto fail;
+    }
+    if(fread(&l2_offset,sizeof(l2_offset),1,l_fp)<=0){
+        printf("\n read the l2 offset failed!");
+        goto fail;
+    }
+    l2_offset=__bswap_64(l2_offset) & L1E_OFFSET_MASK;
+    //printf("\nsize:%ld l2_offset:%x",sizeof(l2_offset),l2_offset);
+
+    if(!l2_offset){
+        //printf("\n l2 table has not been allocated,the data must in backing file!");
+        goto unallocated;
+    }
+    //printf("\n!!!!!!!!!!!!!!!seek!!!!!!!!!!!!!!l2_offset_into_cluster:%ld",l2_offset_into_cluster);
+    l2_offset_into_cluster=l2_offset+(l2_index<<3);
+    if(fseek(l_fp,l2_offset_into_cluster,SEEK_SET)){
+        printf("\n seek to l2_offset_into_cluster failed!");
+        goto fail;
+    }
+    //printf("\n!!!!!!!!!!!!!!!seek over!!!!!!!!!!!!!!");
+    if(fread(&data_offset,sizeof(data_offset),1,l_fp)<=0){
+        printf("\n read data offset failed!");
+        goto fail;
+    }
+    data_offset=__bswap_64(data_offset);
+    if(!(data_offset & L2E_OFFSET_MASK)){
+        //printf("\n l2 entry has not been allocated,the data must in backing file!");
+        goto unallocated;
+    }
+    //printf("\n size:%ld,the data offset:%x",sizeof(data_offset),data_offset);
+
+success:
+    fclose(l_fp);
+    printf("\nsuccess,leave ntfs_blockInOverlay......\n\n\n\n\n\n");
+    return 1;
+fail:
+    fclose(l_fp);
+    printf("\nfail,leave ntfs_blockInOverlay......\n\n\n\n\n\n");
+    return -1;
+unallocated:
+    fclose(l_fp);
+    printf("\nunallocated,leave ntfs_blockInOverlay......\n\n\n\n\n\n");
+    return 0;
+
 }
 /*
  *author:liuyang
@@ -115,7 +239,6 @@ int ntfs_ua_strncmp(short int* a,char* b,int n)
 {
     printf("\nntfs_ua_strncmp!");
 	int i;
-
 	for(i=0;i<n;i++)
 	{
 		if(NTFS_GETU16(a+i)<b[i])
@@ -171,12 +294,14 @@ static void ntfs_load_attributes(struct ntfs_inode_info* ino)
                     /* 1 Unicode character fits in 2 bytes */
                     name=malloc(2*namelen);
                     if( !name ){
-                        printf("\nmalloc error!");
+                        printf("\nntfs_load_attributes:malloc error!");
                         exit(0);
                     }
-
+                    //Unicode 2400 4900 3300 3000 -> short int 24 49 33 3000
                     memcpy(name,attrdata+NTFS_GETU16(attrdata+10),2*namelen);
+                    ntfs_attr->name=name;
                 }
+                ntfs_attr->namelen=namelen;
                 printf("\nattribution type:%x",attr_type);
                 ntfs_attr->type=attr_type;
                 ntfs_attr->resident=(NTFS_GETU8(attrdata+8)==0);
@@ -195,7 +320,6 @@ static void ntfs_load_attributes(struct ntfs_inode_info* ino)
                     ntfs_attr->indexed=NTFS_GETU16(attrdata+0x16);
                     printf("\nthe attr length:%d",ntfs_attr->size);
                 }else{
-
                     printf("\n:this is a non-resident attribution");
                     ntfs_attr->allocated=NTFS_GETU32(attrdata+0x28);
                     ntfs_attr->size=NTFS_GETU32(attrdata+0x30);
@@ -287,7 +411,7 @@ int ntfs_decompress_run(unsigned char **data, int *length, __U32_TYPE *cluster,i
 	}
 	/*跳过length所占字节长度*/
 	*data+=(type & 0xF);
-
+    /* *cluster+= because data maybe <0,it is the run list rule*/
 	switch(type & 0xF0)
 	{
 	case 0:	   *ctype=2; break;
