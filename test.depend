@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1492483672 source:/home/heaven/Documents/C/test/main.c
+1492679104 source:/home/heaven/Documents/C/test/main.c
 	"base.h"
 	"include/public.h"
 
@@ -159,7 +159,7 @@
 1490283078 source:/home/heaven/Documents/C/test/sql/csql.h
 	<mysql/mysql.h>
 
-1491817168 source:/home/heaven/Documents/C/test/sql/sqlread.c
+1492677643 source:/home/heaven/Documents/C/test/sql/sqlread.c
 	"sqlread.h"
 
 1490283100 /home/heaven/Documents/C/test/sql/csql.h
@@ -188,7 +188,9 @@
 1490283535 source:/home/heaven/Documents/C/test/include/ext2.h
 	<stdio.h>
 
-1490585371 /home/heaven/Documents/C/test/sql/sqlread.h
+1492676578 /home/heaven/Documents/C/test/sql/sqlread.h
+	<stdio.h>
+	<stdlib.h>
 	<mysql/mysql.h>
 
 1490317482 source:/home/heaven/Documents/C/test/sql/sqlread.h
@@ -206,7 +208,7 @@
 	<stdint.h>
 	<stdarg.h>
 
-1492573869 source:/home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.c
+1492575150 source:/home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.c
 	"ntfs_main.h"
 
 1492572881 /home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.h
@@ -230,7 +232,7 @@
 	"../include/qcow2.h"
 	"../sql/sqlread.h"
 
-1492486408 source:/home/heaven/Documents/C/test/ext2_qcow2/ext2_main.c
+1492674759 source:/home/heaven/Documents/C/test/ext2_qcow2/ext2_main.c
 	"ext2_main.h"
 
 1492504171 /home/heaven/Documents/C/test/include/ntfs.h

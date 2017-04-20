@@ -18,8 +18,9 @@
     MYSQL *my_conn;
     MYSQL_RES *res;
     MYSQL_ROW row;
+    FILE *fp;
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","detect",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
     {
         printf("Connect Error!n");
         exit(1);
@@ -67,7 +68,7 @@
             where servers.id=%d and servers.id=serverImages.serverId and serverImages.baseImageId=baseImages.id",serverId);
     //printf("******************strsql***************:%s",strsql);
     if(mysql_query(my_conn,strsql)){
-        printf("Query Error,query server images failed!n");
+        printf("Query Error,query server images failed!");
         goto fail0;
     }
     res=mysql_store_result(my_conn);
@@ -83,6 +84,22 @@
     char str_baseImages_id[128]={NULL};
     while((row=mysql_fetch_row(res))){
         baseImage_status=atoi(row[1]);
+        /**first,judge the base image is exist or not!*/
+        fp=fopen(row[0],"r");
+        if(fp==NULL){
+            printf("\nthe base image not exit!");
+            sprintf(strsql,"update baseImages set status=-1 where id=%s",row[2]);
+            if(mysql_query(my_conn,strsql)){
+                printf("Query Error,update server images status=-1 failed!");
+            }
+            continue;
+        }else if(baseImage_status==-1){
+            sprintf(strsql,"update baseImages set status=0 where id=%s",row[2]);
+            if(mysql_query(my_conn,strsql)){
+                printf("Query Error,update server images status=0 failed!");
+            }
+            fclose(fp);
+        }
         if(baseImage_status==1){
             /**注意row[0]是char*类型，因此无需取地址*/
             //printf("\nthe normally base image len:%d",strlen(row[0]));
@@ -132,6 +149,22 @@
         while((row=mysql_fetch_row(res))){
             overlayImage_status=atoi(row[1]);
             //printf("\n overlay image status:%d",overlayImage_status);
+            /**first,judge the overlay image is exist or not!*/
+            fp=fopen(row[0],"r");
+            if(fp==NULL){
+                printf("\nthe overlay image not exit!");
+                sprintf(strsql,"update overlays set status=-1 where id=%s",row[2]);
+                if(mysql_query(my_conn,strsql)){
+                    printf("Query Error,update server images status=-1 failed!");
+                }
+                continue;
+            }else if(overlayImage_status==-1){
+                sprintf(strsql,"update overlays set status=0 where id=%s",row[2]);
+                if(mysql_query(my_conn,strsql)){
+                    printf("Query Error,update server images status=0 failed!");
+                }
+                fclose(fp);
+            }
             if(overlayImage_status==1){
                 /**注意row[0]是char*类型，因此无需取地址*/
                 image_abspath[count]=malloc(strlen(row[0])+1);
@@ -198,14 +231,14 @@ fail0:
     MYSQL_ROW row;
     char strsql[256];
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","detect",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
     {
         printf("\nConnect Error!");
         return 0;
     }
-    sprintf(strsql,"update file join overlays \
-            set file.mode=%d,deleteTime=from_unixtime(%d),inodePosition=%d,dataPosition=%d \
-            where overlays.id=%s and overlays.id=file.overlayId and file.inode=%ld",mode,dtime,inodePosition,dataPosition,overlay_id,inode_number);
+    sprintf(strsql,"update files join overlays \
+            set files.mode=%d,deleteTime=from_unixtime(%d),inodePosition=%d,dataPosition=%d \
+            where overlays.id=%s and overlays.id=files.overlayId and files.inode=%ld",mode,dtime,inodePosition,dataPosition,overlay_id,inode_number);
     if(mysql_query(my_conn,strsql)){
         printf("in sql_update_file_metadata update failed!");
         return -1;
