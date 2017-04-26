@@ -64,8 +64,8 @@
     /**************************************************find the base images*******************************************************/
     //select the baseImage by host id
     sprintf(strsql,"select baseImages.absPath,baseImages.status,baseImages.id\
-            from servers join serverImages join baseImages      \
-            where servers.id=%d and servers.id=serverImages.serverId and serverImages.baseImageId=baseImages.id",serverId);
+            from servers join baseImages      \
+            where servers.id=%d and servers.id=baseImages.server_id",serverId);
     //printf("******************strsql***************:%s",strsql);
     if(mysql_query(my_conn,strsql)){
         printf("Query Error,query server images failed!");
@@ -73,7 +73,7 @@
     }
     res=mysql_store_result(my_conn);
     count=mysql_num_rows(res);
-    printf("\n count:%d",count);
+    printf("\n baseImages count:%d",count);
     if(count<=0){
         printf("\n no images in the host!");
         goto fail0;
@@ -87,7 +87,7 @@
         /**first,judge the base image is exist or not!*/
         fp=fopen(row[0],"r");
         if(fp==NULL){
-            printf("\nthe base image not exit!");
+            printf("\nthe base image:%s not exit!",row[0]);
             sprintf(strsql,"update baseImages set status=-1 where id=%s",row[2]);
             if(mysql_query(my_conn,strsql)){
                 printf("Query Error,update server images status=-1 failed!");
@@ -105,7 +105,7 @@
             //printf("\nthe normally base image len:%d",strlen(row[0]));
             //baseImages[count]=row[0];
             /*为了使用mysql中in关键字*/
-            printf("\nthe str_baseimages_id:%s",str_baseImages_id);
+            //printf("\nthe str_baseimages_id:%s",str_baseImages_id);
             strcat(str_baseImages_id,row[2]);
             strcat(str_baseImages_id,",");
             //baseImages[i]=strdup(baseImages[i]);
@@ -128,11 +128,11 @@
         //printf("\n str_baseImages_id:%d,content:%s",strlen(str_baseImages_id),str_baseImages_id);
         /*去除最后一位逗号*/
         str_baseImages_id[strlen(str_baseImages_id)-1]='\0';
-        printf("\n content:%s",str_baseImages_id);
+        printf("\n str_baseImages_id:%s",str_baseImages_id);
         sprintf(strsql,"select overlays.absPath,overlays.status,overlays.id \
                 from overlays join baseImages \
                 where baseImages.id=overlays.baseImageId and baseImages.id in(%s)",str_baseImages_id);
-        printf("\n******************strsql***************:%s",strsql);
+        //printf("\n******************strsql***************:%s",strsql);
         if(mysql_query(my_conn,strsql)){
             printf("\nQuery Error,query overlay images failed!");
             goto fail;
@@ -152,7 +152,7 @@
             /**first,judge the overlay image is exist or not!*/
             fp=fopen(row[0],"r");
             if(fp==NULL){
-                printf("\nthe overlay image not exit!");
+                printf("\nthe overlay image:%s not exit!",row[0]);
                 sprintf(strsql,"update overlays set status=-1 where id=%s",row[2]);
                 if(mysql_query(my_conn,strsql)){
                     printf("Query Error,update server images status=-1 failed!");

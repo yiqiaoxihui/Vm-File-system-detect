@@ -39,22 +39,16 @@
 		<Unit filename="base.h">
 			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
-		<Unit filename="ext2_qcow2/inode.c">
+		<Unit filename="ext2_qcow2/ext2_main.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="ext2_qcow2/inode.h">
+		<Unit filename="ext2_qcow2/ext2_main.h">
 			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
-		<Unit filename="guestfslib/MAX_PROC_NR" />
-		<Unit filename="guestfslib/Makefile.am" />
-		<Unit filename="guestfslib/Makefile.in" />
-		<Unit filename="guestfslib/guestfs-actions.pod" />
-		<Unit filename="guestfslib/guestfs-availability.pod" />
-		<Unit filename="guestfslib/guestfs-structs.pod" />
-		<Unit filename="guestfslib/guestfs.pod" />
-		<Unit filename="guestfslib/libguestfs.pc.in" />
-		<Unit filename="guestfslib/libguestfs.syms" />
 		<Unit filename="include/ext2.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="include/ntfs.h">
 			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="include/public.h">
@@ -65,6 +59,12 @@
 		</Unit>
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ntfs_qcow2/ntfs_main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ntfs_qcow2/ntfs_main.h">
+			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="sql/sqlread.c">
 			<Option compilerVar="CC" />

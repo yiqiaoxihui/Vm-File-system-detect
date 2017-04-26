@@ -249,7 +249,6 @@ int ext2_inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_of
     //char *read_backingfile_name;
     int i,j;
     int count;
-
     printf("\n\n\n\n\n\n\n begin inode_in_overlay.........");
     l_fp=fopen(qcow2Image,"r");
     if(l_fp==NULL){
@@ -270,20 +269,6 @@ int ext2_inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_of
 //    header->backing_file_size=__bswap_32(header->backing_file_size);
     CLUSTER_BITS=__bswap_32(header->cluster_bits);
     L2_BITS=CLUSTER_BITS-3;
-    /***************************提取原始镜像名，检查是否一致**************************************************/
-//    printf("\n the qcow2 version%d",header->version);
-//    fseek(l_fp,header->backing_file_offset,SEEK_SET);
-//    int len=header->backing_file_size-9;
-//    read_backingfile_name=(char *)malloc(header->backing_file_size+1);
-//    if(fgets(read_backingfile_name,header->backing_file_size+1,l_fp)==NULL){
-//        printf("\n read backingfile name error!");
-//        return -3;
-//    }
-//    printf("\n size:%d,backing file name:%s,string len %ld",header->backing_file_size,read_backingfile_name,sizeof(read_backingfile_name));
-//    if(strstr(baseImage,read_backingfile_name)==NULL){
-//        printf("\n wrong overlay images!");
-//        return -4;
-//    }
     /***************************根据块偏移映射到l1,l2表，判断该块在增量中是否分配****************************************************************/
     //the beginning 1M(256 blocks) not belongs to ext4 fs,I think.
     for(i=0;i<inode_count;i++){

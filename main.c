@@ -94,75 +94,7 @@ void *multi_read_image_file(void *var){
     }
     printf("\nidentical!\noverlay_image_id:%s,overlay_image_path:%s,base image path:%s",overlay_image_id,overlay_image_path,base_image_path);
     /******************************************判断原始镜像和增量镜像中的原始镜像名是否一致***end*********************************************/
-/*    {//
-        int all=0;
-        unsigned long int allsize=0;
-        blockInOverlay_error=0;
-        inodeInOverlay_error=0;
-        magic_error=0;
-        int error_file_count1=0;
-        overlay_file_count=0;
-        inode_in_overlay_file_count=0;
-        read_error=0;
-        __U32_TYPE inode_number;
-        FILE *fp,*fp1,*fp2;
-        char line[256];
-        struct guestfs_statns *gs1;
-        char *md5str;
-        fp=fopen("/home/heaven/Downloads/test.txt","r");
-        //fp1=fopen("/home/heaven/Downloads/truepath.txt","w");所属增量镜像
 
-        //fp2=fopen("/home/heaven/Downloads/overlay_file.txt","w");
-        if(fp==NULL){
-            printf("\n open allpath fail!");
-            exit(0);
-        }
-    //    fgets(line,256,fp);
-    //    line[strlen(line)-1]='\0';
-    //    printf("%s,%d",line,strlen(line));
-
-        guestfs_h *g=guestfs_create();
-        guestfs_add_drive(g,overlay_image_path);
-        guestfs_launch(g);
-        guestfs_mount_ro(g,"/dev/sda1","/");
-        while(fgets(line,256,fp)){
-            all++;
-            line[strlen(line)-1]='\0';
-            printf("\nthe file number:%d,file:%s",all,line);
-            gs1=guestfs_lstatns(g,line);
-            printf("\nblock:%d,blocksize:%d,size:%d",gs1->st_blocks,gs1->st_blksize,gs1->st_size);
-            if(gs1==NULL){
-                error_file_count1++;
-                printf("\nthe file not exist:%.0f",error_file_count1);
-                continue;
-            }
-            allsize+=gs1->st_size;
-            inode_number=gs1->st_ino;
-            which_images_by_inode("/var/lib/libvirt/images/base.img",overlay_image_path,inode_number,line);
-
-        }
-        for(i=0;i<overlay_file_count;i++){
-            printf("\nto do md5 file:%s",overlay_filepath[i]);
-            md5str=guestfs_checksum(g,"md5",overlay_filepath[i]);
-            if(md5str==NULL){
-                continue;
-            }
-            printf("\nmd5:%s|file in overlay:%s",md5str,overlay_filepath[i]);
-            //fputs(overlay_filepath[i],fp2);
-            //fputc('\n',fp2);
-        }
-        allsize=allsize/1024;
-        printf("\n average file size:%d KB",allsize/all);
-        printf("\nall file:%d;\n file in overlay:%d",all,overlay_file_count);
-        printf("\nerror file:%.0f;\nread_error:%0.f;\next2_blockInOverlay error:%d;\ninodeInOverlay:%d;\nmagic_error:%d\n",error_file_count1,read_error,blockInOverlay_error,inodeInOverlay_error,magic_error);
-        printf("\n增量文件占比:%.2f%%",(((float)overlay_file_count)/(all-error_file_count-read_error))*100);
-        guestfs_free_statns(gs1);
-        guestfs_umount (g, "/");
-        guestfs_shutdown (g);
-        guestfs_close (g);
-        fclose(fp);
-    }
-    */
 
     my_conn=mysql_init(NULL);
     if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
@@ -223,7 +155,7 @@ void *multi_read_image_file(void *var){
                 sprintf(strsql,"update files set inode=%ld,size=%ld,modifyTime=from_unixtime(%ld),createTime=from_unixtime(%ld),accessTime=from_unixtime(%ld) where files.id=%s",
                         gs1->st_ino,gs1->st_size,gs1->st_mtime_sec,gs1->st_ctime_sec,gs1->st_atime_sec,row[1]);
             }
-            printf("\nstrsql:%s\nlen of strsql:%d",strsql,strlen(strsql));
+            //printf("\nstrsql:%s\nlen of strsql:%d",strsql,strlen(strsql));
             if(mysql_query(my_conn,strsql)){
                 printf("\nupdate the meta data of file failed!!!");
             }
@@ -362,7 +294,7 @@ void allfile_md5(){
 /*
  *author:liuyang
  *date  :2017/3/28
- *detail:统计虚拟机全部文件和增量文件占比
+ *detail:统计虚拟机全部文件和增量文件占比,并计算在增量中文件的md5
  */
 void statistics_proportion(){
     int i;
@@ -380,7 +312,10 @@ void statistics_proportion(){
     char line[256];
     struct guestfs_statns *gs1;
     char *md5str;
-    fp=fopen("/home/heaven/Downloads/truepath.txt","r");
+    char *baseImage="/var/lib/libvirt/images/base.img";
+    char *overlay="/var/lib/libvirt/images/snap1.img";
+    char *filepath="/home/heaven/Downloads/truepath.txt";
+    fp=fopen(filepath,"r");
     //fp1=fopen("/home/heaven/Downloads/truepath.txt","w");
     /*only in overlay files*/
     //fp2=fopen("/home/heaven/Downloads/overlay_file.txt","w");
@@ -410,7 +345,7 @@ void statistics_proportion(){
 
         printf("\nall file number in VM:%.0f",all_file_count);
 
-        which_images_by_inode("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap1.img",inode_number,line);
+        which_images_by_inode(baseImage,overlay,inode_number,line);
         guestfs_free_stat(gs1);
         //break;
 
@@ -436,4 +371,75 @@ void statistics_proportion(){
     //fclose(fp2);
     //fclose(fp1);
     free(md5str);
+}
+void system_test(){
+/*    {//
+        int all=0;
+        unsigned long int allsize=0;
+        blockInOverlay_error=0;
+        inodeInOverlay_error=0;
+        magic_error=0;
+        int error_file_count1=0;
+        overlay_file_count=0;
+        inode_in_overlay_file_count=0;
+        read_error=0;
+        __U32_TYPE inode_number;
+        FILE *fp,*fp1,*fp2;
+        char line[256];
+        struct guestfs_statns *gs1;
+        char *md5str;
+        fp=fopen("/home/heaven/Downloads/test.txt","r");
+        //fp1=fopen("/home/heaven/Downloads/truepath.txt","w");所属增量镜像
+
+        //fp2=fopen("/home/heaven/Downloads/overlay_file.txt","w");
+        if(fp==NULL){
+            printf("\n open allpath fail!");
+            exit(0);
+        }
+    //    fgets(line,256,fp);
+    //    line[strlen(line)-1]='\0';
+    //    printf("%s,%d",line,strlen(line));
+
+        guestfs_h *g=guestfs_create();
+        guestfs_add_drive(g,overlay_image_path);
+        guestfs_launch(g);
+        guestfs_mount_ro(g,"/dev/sda1","/");
+        while(fgets(line,256,fp)){
+            all++;
+            line[strlen(line)-1]='\0';
+            printf("\nthe file number:%d,file:%s",all,line);
+            gs1=guestfs_lstatns(g,line);
+            printf("\nblock:%d,blocksize:%d,size:%d",gs1->st_blocks,gs1->st_blksize,gs1->st_size);
+            if(gs1==NULL){
+                error_file_count1++;
+                printf("\nthe file not exist:%.0f",error_file_count1);
+                continue;
+            }
+            allsize+=gs1->st_size;
+            inode_number=gs1->st_ino;
+            which_images_by_inode("/var/lib/libvirt/images/base.img",overlay_image_path,inode_number,line);
+
+        }
+        for(i=0;i<overlay_file_count;i++){
+            printf("\nto do md5 file:%s",overlay_filepath[i]);
+            md5str=guestfs_checksum(g,"md5",overlay_filepath[i]);
+            if(md5str==NULL){
+                continue;
+            }
+            printf("\nmd5:%s|file in overlay:%s",md5str,overlay_filepath[i]);
+            //fputs(overlay_filepath[i],fp2);
+            //fputc('\n',fp2);
+        }
+        allsize=allsize/1024;
+        printf("\n average file size:%d KB",allsize/all);
+        printf("\nall file:%d;\n file in overlay:%d",all,overlay_file_count);
+        printf("\nerror file:%.0f;\nread_error:%0.f;\next2_blockInOverlay error:%d;\ninodeInOverlay:%d;\nmagic_error:%d\n",error_file_count1,read_error,blockInOverlay_error,inodeInOverlay_error,magic_error);
+        printf("\n增量文件占比:%.2f%%",(((float)overlay_file_count)/(all-error_file_count-read_error))*100);
+        guestfs_free_statns(gs1);
+        guestfs_umount (g, "/");
+        guestfs_shutdown (g);
+        guestfs_close (g);
+        fclose(fp);
+    }
+    */
 }

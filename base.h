@@ -21,4 +21,6 @@ void *multi_read_image_file(void *path);
 void allfile_md5();
 
 void statistics_proportion();
+
+void system_test();
 #endif // BASE_H_INCLUDED
