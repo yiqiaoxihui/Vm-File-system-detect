@@ -6,7 +6,6 @@ int main()
     //mtrace();
     /**关键文件检测*/
     key_files_detect();
-
     {   /**for test ntfs*/
         //unsigned long int inodes[2]={5625,10720};
         //ntfs_update_file_metadata("/var/lib/libvirt/images/winxp_snap1.img","/var/lib/libvirt/images/winxp.img",10720,1,11);
@@ -22,16 +21,16 @@ int key_files_detect(){
     int images_count=0;
     int i;
     int thread_create;
-    /******指针空间必须在主函数中分配*******/
+    /******指针空间必须在主函数中分配??*******/
     image_abspath=malloc((MAX_OVERLAY_IMAGES+1)*sizeof(char *));
     image_id=malloc((MAX_OVERLAY_IMAGES+1)*sizeof(char *));
     /*********************************read the image path***************************************/
     if(read_host_image_name(image_abspath,image_id)<=0){
-        printf("\n read image abspath failed or no use images!");
+        printf("\n read image abspath failed or no used images!");
         return 0;
     }
     for(i=0;image_abspath[i];i++){
-            printf("\n in main read image:%s",image_abspath[i]);
+            printf("\n back to  key_files_detect, read image:%s",image_abspath[i]);
             images_count++;
     }
     printf("\nimage count:%d",images_count);
@@ -39,7 +38,7 @@ int key_files_detect(){
     threadVar=malloc(images_count*sizeof(struct ThreadVar));
     for(i=0;i<images_count;i++){
         //threadVar[434].image_id=image_abspath[i];
-        printf("\noverlay:%s,id:%s",image_abspath[i],image_id[i]);
+        //printf("\noverlay:%s,id:%s",image_abspath[i],image_id[i]);
         threadVar[i].image_id=image_id[i];
         threadVar[i].image_path=image_abspath[i];
         thread_create=pthread_create(&read_image_thread[i],NULL,multi_read_image_file,(void *)&threadVar[i]);
@@ -64,6 +63,7 @@ int key_files_detect(){
  *detail:多线程读取多个镜像，更新监控文件信息
  *return 1
  */
+ //   /home/Desktop/a.txtff
 void *multi_read_image_file(void *var){
     struct ThreadVar *threadVar=(struct ThreadVar *)var;
     char *overlay_image_id;
@@ -127,7 +127,7 @@ void *multi_read_image_file(void *var){
     printf("\n****$$$$*****begin read image by libguestfs***$$$$*****");
 
     guestfs_launch(g);
-    //gues
+    //
     guestfs_mount(g,"/dev/sda1","/");
     count=0;
     /****************************************使用guestfs读取文件inode元信息，更新文件状态**************************************************/
@@ -208,12 +208,18 @@ void *multi_read_image_file(void *var){
             printf("\nguestfs cal md5 failed,maybe the file not exist!");
             continue;
         }
-        printf("file:%s",row[2]);
+        //printf("file id:%s",row[2]);
         printf("\nthe normal file md5:%s;\nthe file md5 now:%s",row[1],md5str);
         if(strcmp(md5str,row[1])==0){
-            printf("\nthe hash consistency,file security!");
+
+            printf("\nfile:%s,the hash consistency,file security!",row[0]);
+            sprintf(strsql,"update files set files.isModified=0,files.status=1 where files.id=%s",row[2]);
+            if(mysql_query(my_conn,strsql)){
+                printf("\nin multi: modify file isModified=0 failed!");
+                continue;
+            }
         }else{
-            printf("\nthe hash not consistency,file is modified!");
+            printf("\nfile:%s,the hash not consistency,file is modified!",row[0]);
             sprintf(strsql,"update files set files.isModified=1 where files.id=%s",row[2]);
             if(mysql_query(my_conn,strsql)){
                 printf("\nin multi: modify file isModified=1 failed!");

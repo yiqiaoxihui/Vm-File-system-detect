@@ -58,7 +58,7 @@
             goto fail0;
         }
         serverId=atoi(row[0]);
-        printf("\n host_status:%d,serverId:%d",host_status,serverId);
+        //printf("\n host_status:%d,serverId:%d",host_status,serverId);
     }
     /**************************************************check whether the host exist in database***end*************************************************/
     /**************************************************find the base images*******************************************************/
@@ -197,14 +197,14 @@
         goto back;
     };
     for(i=0;image_abspath[i];i++){
-        printf("\ntest all the overlay images path:%s,id:%s",image_abspath[i],image_id[i]);
+        printf("\n all need detect overlay images path:%s,id:%s",image_abspath[i],image_id[i]);
     }
 
     //printf("\nsize of imagePath:%d",sizeof(image_abspath));
     /*******************************************read overlay images by the host images id***end******************************************/
     mysql_close(my_conn);
     //free(baseImages);
-    printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^1^^^^^^^^^^^^^^^^^^^^^");
+    printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^1^^^^^^^^^^^^^^^^^^^^^\n\n\n\n\n\n\n\n");
     return 1;
 back:
     mysql_close(my_conn);

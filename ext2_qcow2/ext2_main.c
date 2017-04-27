@@ -114,7 +114,7 @@ int ext2_update_file_metadata(char *overlay_image_path,char base_image_path[],__
         inode_block_number[i]=begin_block_of_inodetable[i]+inode_block_offset_in_inodetable;
         //printf("\n inode block offest in inodetable:%d,\n the real block number of inode%d,\n inode_bytes_offset_into_inodetable%x",inode_block_offset_in_inodetable,inode_block_number[i],inode_bytes_offset_into_inodetable[i]);
     }
-    //STOP IN HHERE,TOMORROW CONTINUE!
+    //判断文件元信息位置
     int inode_status=ext2_inodes_in_overlay(base_image_path,overlay_image_path,inode_block_number,inode_bytes_offset_into_inodetable,block_bits,e_ino,inode_count);
     if(inode_status<0){
         printf("\n error:inode_in_overlay() fail!");
