@@ -31,6 +31,7 @@
         perror("gethostname!");
         goto fail0;
     }
+    printf("\nread server info,get the image........");
     hostId=gethostid();
     //查询数据库中是否有该服务器
     char strsql[256];
@@ -73,7 +74,7 @@
     }
     res=mysql_store_result(my_conn);
     count=mysql_num_rows(res);
-    printf("\n baseImages count:%d",count);
+    //printf("\n baseImages count:%d",count);
     if(count<=0){
         printf("\n no images in the host!");
         goto fail0;
@@ -87,7 +88,7 @@
         /**first,judge the base image is exist or not!*/
         fp=fopen(row[0],"r");
         if(fp==NULL){
-            printf("\nthe base image:%s not exit!",row[0]);
+            //printf("\nthe base image:%s not exit!",row[0]);
             sprintf(strsql,"update baseImages set status=-1 where id=%s",row[2]);
             if(mysql_query(my_conn,strsql)){
                 printf("Query Error,update server images status=-1 failed!");
@@ -109,7 +110,7 @@
             strcat(str_baseImages_id,row[2]);
             strcat(str_baseImages_id,",");
             //baseImages[i]=strdup(baseImages[i]);
-            printf("\n the status=1 base image path:%s",row[0]);
+            //printf("\n the status=1 base image path:%s",row[0]);
             count++;
         }
         if(baseImage_status==2){
@@ -139,7 +140,7 @@
         }
         res=mysql_store_result(my_conn);
         count=mysql_num_rows(res);
-        printf("\nall overlay images count:%d",count);
+        //printf("\nall overlay images count:%d",count);
         if(count<=0){
             printf("\nno overlay images in the server!");
             goto fail;
@@ -174,7 +175,7 @@
                 //image_abspath[count]=row[0];
                 //image_id[count]=row[2];
                 //baseImages[i]=strdup(baseImages[i]);
-                printf("\nstatus is 1,the overlay image path:%s",image_abspath[count]);
+                //printf("\nstatus is 1,the overlay image path:%s",image_abspath[count]);
                 count++;
             }
             if(overlayImage_status==2){
@@ -224,8 +225,8 @@ fail0:
  *detail:更新文件信息，inode及数据块位置
  *return 1:success,0:failed
  */
- int sql_update_file_metadata(char  *overlay_id,__U64_TYPE inode_number,__U16_TYPE mode,__U32_TYPE dtime,int inodePosition,int dataPosition){
-    printf("\n\n\n\n\n\n\n begin sql_update_file_metadata......%s,%d,%d,%d,%d,%d",overlay_id,inode_number,mode,dtime,inodePosition,dataPosition);
+ int sql_update_file_metadata(char  *overlay_id,__U64_TYPE inode_number,int inodePosition,int dataPosition){
+    printf("\n\n\n\n\n\n\n begin sql_update_file_metadata......%s,%ld,%d,%d",overlay_id,inode_number,inodePosition,dataPosition);
     MYSQL *my_conn;
     MYSQL_RES *res;
     MYSQL_ROW row;
@@ -237,17 +238,67 @@ fail0:
         return 0;
     }
     sprintf(strsql,"update files join overlays \
-            set files.mode=%d,deleteTime=from_unixtime(%d),inodePosition=%d,dataPosition=%d \
-            where overlays.id=%s and overlays.id=files.overlayId and files.inode=%ld",mode,dtime,inodePosition,dataPosition,overlay_id,inode_number);
+            set inodePosition=%d,dataPosition=%d \
+            where overlays.id=%s and overlays.id=files.overlayId and files.inode=%ld",inodePosition,dataPosition,overlay_id,inode_number);
     if(mysql_query(my_conn,strsql)){
         printf("in sql_update_file_metadata update failed!");
-        return -1;
+        goto fail;
     }
     if(mysql_affected_rows(my_conn)>=0){
         printf("\n%d update successfully,leave sql_update_file_metadata.......\n\n\n\n\n\n",mysql_affected_rows(my_conn));
-        return 1;
     }
-    return 0;
+    mysql_close(my_conn);
+    return 1;
+fail:
+    mysql_close(my_conn);
+    return -1;
  }
-
-
+/*
+ *author:liuyang
+ *date  :2017/5/3
+ *detail:获取文件类型
+ *return char*
+ */
+char* get_filesystem_type(char *overlayid){
+    //printf("\n\n\n\n\nbegin get_filesystem_type......%s",overlayid);
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    char strsql[512];
+    char *type=NULL;
+    my_conn=mysql_init(NULL);
+    int count=0;
+    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    {
+        printf("\nConnect Error!");
+        return 0;
+    }
+    sprintf(strsql,"select filesystemType.name from overlays join baseImages join filesystemType where overlays.id=%s and overlays.baseImageId=baseImages.id and baseImages.type=filesystemType.id",overlayid);
+    if(mysql_query(my_conn,strsql)){
+        printf("in get_filesystem_type update failed!");
+        goto fail;
+    }
+    res=mysql_store_result(my_conn);
+    count=mysql_num_rows(res);
+    //printf("\n baseImages count:%d",count);
+    if(count<=0){
+        printf("\n can not find the file system type!");
+        goto fail;
+    }
+    row=mysql_fetch_row(res);
+    type=row[0];
+    printf("\nthe file system type:%s",row[0]);
+    if(strcmp(type,"EXT2")==0){
+        type="EXT2";
+    }else if(strcmp(type,"NTFS")==0){
+        type="NTFS";
+    }else{
+        type="";
+    }
+    printf("\nleave get_filesystem_type.....%s\n\n\n\n",type);
+    mysql_close(my_conn);
+    return type;
+fail:
+    mysql_close(my_conn);
+    return NULL;
+}

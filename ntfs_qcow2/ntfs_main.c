@@ -6,7 +6,7 @@
  *detail:由inode判断文件的位置,更新文件位置
  *return
  */
-int ntfs_update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TYPE inode,int inode_count,char *overlay_id){
+int ntfs_update_file_metadata(char *overlay_image_path,char *base_image_path,__U64_TYPE inode[],int inode_count,char *overlay_id){
     ntfs_volume vol;
     FILE *bi_fp;
     struct ntfs_inode_info ino;
@@ -33,63 +33,81 @@ int ntfs_update_file_metadata(char *overlay_image_path,char *base_image_path,__U
     ntfs_init_volume(&vol,ntfs_super_block);
     printf("\nthe blocksize:%d\nclusterfactor:%d\n mft_cluster offset:%d\nmft_recordsize:%d,\nmft_clusters_per_record:%d\nclustersize:%d",
            vol.blocksize,vol.clusterfactor,vol.mft_cluster,vol.mft_recordsize,vol.mft_clusters_per_record,vol.clustersize);
-    ino.i_number=1072;//1072 80H non-resident
+
     ino.vol=&vol;
     ino.attr=malloc(vol.mft_recordsize);
     if(!ino.attr){
         printf("\nmalloc error:malloc ino.attr failed!");
         goto fail;
     }
-    /********************************************************************/
-    in_overlay=ntfs_inode_in_overlay(overlay_image_path,&ino);
-    if(in_overlay==0){
-        printf("\n*******************NTFS inode in backing image!");
-    }else if(in_overlay==1){
-        printf("\n*******************NTFS inode in overlay !");
+    for(i=0;i<inode_count;i++){
+        printf("\nthe file index:%ld",inode[i]);
+        ino.i_number=inode[i];//1072 80H non-resident
+        in_overlay=ntfs_inode_in_overlay(overlay_image_path,&ino);
+        if(in_overlay==0){
+            printf("\n*******************NTFS inode in backing image!");
+            /*更新文件最新状态信息*/
+            sql_update_file_metadata(overlay_id,ino.i_number,1,1);
+        }else if(in_overlay==1){
+            printf("\n*******************NTFS inode in overlay !");
 
-        if(!ntfs_check_mft_record(ino.vol,ino.attr,"FILE",ino.vol->mft_recordsize))
-        {
-            printf("Invalid MFT record corruption");
-            goto fail;
-        }
-        ino.sequence_number=NTFS_GETU16(ino.attr+0x10);
-        ino.attr_count=0;
-        ino.record_count=0;
-        ino.records=0;
-        ino.attrs=0;
-        ntfs_load_attributes(&ino);
-        //printf("\nthe runlist number:%d,cluster:%x",ino.attrs[1].d.r.len,ino.attrs[1].d.r.runlist[0].cluster);
-        attr=ntfs_find_attr(&ino,ino.vol->at_data,0);
-        if(attr){
-            if(attr->resident==0){
-                printf("\非常驻80属性，文件内容在run list 中");
-                printf("\nsuccessful!the runlist number:%d,cluster:%x",attr->d.r.len,attr->d.r.runlist[0].cluster);
-                if(attr->d.r.len>0){
-                    data_cluster_offset=attr->d.r.runlist[0].cluster;
-                    /*all bit-1*/
-                    BIT_1_POS(ino.vol->clustersize,ntfs_cluster_bits);
-                    printf("\ndata_cluster_offset:%x,%d;\nthe ntfs_cluster_bits:%d",
-                           data_cluster_offset,data_cluster_offset,ntfs_cluster_bits);
-                    in_overlay=ntfs_blockInOverlay(overlay_image_path,data_cluster_offset,ntfs_cluster_bits);
-                    if(in_overlay==0){
-                        printf("\n*******************:data in overlay not been allocated!");
-                    }else if(in_overlay==1){
-                        //TODO update file info
-                        printf("\n*******************:data in overlay  been allocated!");
-                    }else{
-                        printf("\n*******************:ntfs_blockInOverlay ERROR!");
-                    }
-                }else{
-                    printf("\nntfs_update_file_metadata:run list problem!");
-                }
-
+            if(!ntfs_check_mft_record(ino.vol,ino.attr,"FILE",ino.vol->mft_recordsize))
+            {
+                printf("Invalid MFT record corruption");
+                goto fail0;
             }
+            ino.sequence_number=NTFS_GETU16(ino.attr+0x10);
+            ino.attr_count=0;
+            ino.record_count=0;
+            ino.records=0;
+            ino.attrs=0;
+            ntfs_load_attributes(&ino);
+            //printf("\nthe runlist number:%d,cluster:%x",ino.attrs[1].d.r.len,ino.attrs[1].d.r.runlist[0].cluster);
+            /*文件的80属性，文件内容*/
+            attr=ntfs_find_attr(&ino,ino.vol->at_data,0);
+            if(attr){
+                if(attr->resident==0){
+                    printf("\非常驻80属性，文件内容在run list 中");
+                    printf("\nsuccessful!the runlist number:%d,cluster:%x",attr->d.r.len,attr->d.r.runlist[0].cluster);
+                    if(attr->d.r.len>0){
+                        data_cluster_offset=attr->d.r.runlist[0].cluster;
+                        /*all bit-1*/
+                        BIT_1_POS(ino.vol->clustersize,ntfs_cluster_bits);
+                        printf("\ndata_cluster_offset:%x,%d;\nthe ntfs_cluster_bits:%d",
+                               data_cluster_offset,data_cluster_offset,ntfs_cluster_bits);
+                        in_overlay=ntfs_blockInOverlay(overlay_image_path,data_cluster_offset,ntfs_cluster_bits);
+                        if(in_overlay==0){
+                            sql_update_file_metadata(overlay_id,ino.i_number,2,1);
+                            printf("\n*******************:data in overlay not been allocated!");
+                        }else if(in_overlay==1){
+                            //TODO update file info
+                            sql_update_file_metadata(overlay_id,ino.i_number,2,2);
+                            printf("\n*******************:data in overlay  been allocated!");
+                        }else{
+                            printf("\n*******************:ntfs_blockInOverlay ERROR!");
+                        }
+                    }else{
+                        printf("\nntfs_update_file_metadata:run list problem!");
+                    }
+
+                }else{
+                    printf("\nthe file data attribution is resident,file data must be in overlay!");
+                    /*更新文件最新状态信息*/
+                    sql_update_file_metadata(overlay_id,ino.i_number,2,2);
+                }
+            }else{
+                printf("\ncan not find file data attribution!");
+            }
+        }else{
+            printf("\n*******************ntfs_in_overlay error!!!");
         }
-    }else{
-        printf("\n*******************ntfs_in_overlay error!!!");
     }
+    /********************************************************************/
+    free(ino.attr);
     fclose(bi_fp);
     return 1;
+fail0:
+    free(ino.attr);
 fail:
     fclose(bi_fp);
     return -1;

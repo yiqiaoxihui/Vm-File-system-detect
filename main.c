@@ -15,6 +15,12 @@ int main()
     //statistics_proportion();
     return 0;
 }
+/*
+ *author:liuyang
+ *date  :2017/3/21
+ *detail:拉取该节点增量镜像，开启多线程处理
+ *return 1
+ */
 int key_files_detect(){
     char **image_abspath;
     char **image_id;
@@ -33,7 +39,7 @@ int key_files_detect(){
             printf("\n back to  key_files_detect, read image:%s",image_abspath[i]);
             images_count++;
     }
-    printf("\nimage count:%d",images_count);
+    //printf("\nimage count:%d",images_count);
     read_image_thread=malloc(images_count*sizeof(pthread_t));
     threadVar=malloc(images_count*sizeof(struct ThreadVar));
     for(i=0;i<images_count;i++){
@@ -70,6 +76,7 @@ void *multi_read_image_file(void *var){
     char *overlay_image_path;
     char base_image_path[256];
     char strsql[512];/*take care!!!*/
+    char *type;
     MYSQL *my_conn;
     MYSQL_RES *res;
     MYSQL_ROW row;
@@ -89,10 +96,10 @@ void *multi_read_image_file(void *var){
         pthread_exit(0);
     }
     if(is_base_image_identical(overlay_image_id,base_image_path)<=0){
-        printf("\n not identical!exit thread!>>>>>>>>>>\n\n\n\n\n\n\n\n\n",overlay_image_id);
+        printf("\n not identical!exit thread!\n\n\n\n\n\n\n\n\n",overlay_image_id);
         pthread_exit(0);
     }
-    printf("\nidentical!\noverlay_image_id:%s,overlay_image_path:%s,base image path:%s",overlay_image_id,overlay_image_path,base_image_path);
+    printf("\nidentical!\noverlay_image_id:%s,overlay_image_path:%s;\nbase image path:%s",overlay_image_id,overlay_image_path,base_image_path);
     /******************************************判断原始镜像和增量镜像中的原始镜像名是否一致***end*********************************************/
 
 
@@ -116,7 +123,7 @@ void *multi_read_image_file(void *var){
     count=mysql_num_rows(res);
     /**该镜像无徛控文件，无需加载*/
     if(count<=0){
-        printf("\n<<<<<<<<<------in multi:no file in the image,thread exit!---->>>>>>>>>>");
+        printf("\nin multi:no file in the image,thread exit!\n\n\n\n\n\n\n");
         mysql_close(my_conn);
         pthread_exit(0);
     }
@@ -124,11 +131,12 @@ void *multi_read_image_file(void *var){
 
     inodes=malloc((count+1)*sizeof(__U64_TYPE));
     //printf("\n$$$$$$$$$$$$$$count:%d,sizeof(inodes):%d$$$$$$$$$$$$$$$$",count,sizeof(inodes));
-    printf("\n****$$$$*****begin read image by libguestfs***$$$$*****");
+    //printf("\n*********begin read image by libguestfs********");
 
     guestfs_launch(g);
     //
     guestfs_mount(g,"/dev/sda1","/");
+    printf("\nall the file number:%d",count);
     count=0;
     /****************************************使用guestfs读取文件inode元信息，更新文件状态**************************************************/
     while((row=mysql_fetch_row(res))){
@@ -136,6 +144,7 @@ void *multi_read_image_file(void *var){
         //根据路径名获取inode等信息
         gs1=guestfs_statns(g,row[0]);
         if(gs1!=NULL){
+            printf("\nin muti:the file name:%s",row[0]);
             /**未新添加的文件计算hash值*/
             //printf("\nthe fisrAddFlag:%s",row[2]);
             md5str=NULL;
@@ -143,24 +152,24 @@ void *multi_read_image_file(void *var){
                 md5str=guestfs_checksum(g,"md5",row[0]);
                 //printf("\nhash is:%s,len:%d",md5str,strlen(md5str));
                 if(md5str!=NULL){
-                    printf("\nhash is not null:%s",md5str);
-                    sprintf(strsql,"update files set inode=%ld,size=%ld,modifyTime=from_unixtime(%ld),createTime=from_unixtime(%ld),accessTime=from_unixtime(%ld),firstAddFlag=1,hash='%s' where files.id=%s",
-                            gs1->st_ino,gs1->st_size,gs1->st_mtime_sec,gs1->st_ctime_sec,gs1->st_atime_sec,md5str,row[1]);
+                    printf("\nin muti:new detected file,hash:%s",md5str);
+                    sprintf(strsql,"update files set inode=%ld,size=%ld,modifyTime=from_unixtime(%ld),createTime=from_unixtime(%ld),accessTime=from_unixtime(%ld),mode=%d,firstAddFlag=1,hash='%s' where files.id=%s",
+                            gs1->st_ino,gs1->st_size,gs1->st_mtime_sec,gs1->st_ctime_sec,gs1->st_atime_sec,gs1->st_mode,md5str,row[1]);
 
                 }else{
-                    sprintf(strsql,"update files set inode=%ld,size=%ld,modifyTime=from_unixtime(%ld),createTime=from_unixtime(%ld),accessTime=from_unixtime(%ld) where files.id=%s",
-                            gs1->st_ino,gs1->st_size,gs1->st_mtime_sec,gs1->st_ctime_sec,gs1->st_atime_sec,row[1]);
+                    sprintf(strsql,"update files set inode=%ld,size=%ld,modifyTime=from_unixtime(%ld),createTime=from_unixtime(%ld),accessTime=from_unixtime(%ld),mode=%d where files.id=%s",
+                            gs1->st_ino,gs1->st_size,gs1->st_mtime_sec,gs1->st_ctime_sec,gs1->st_atime_sec,gs1->st_mode,row[1]);
                 }
             }else{
-                sprintf(strsql,"update files set inode=%ld,size=%ld,modifyTime=from_unixtime(%ld),createTime=from_unixtime(%ld),accessTime=from_unixtime(%ld) where files.id=%s",
-                        gs1->st_ino,gs1->st_size,gs1->st_mtime_sec,gs1->st_ctime_sec,gs1->st_atime_sec,row[1]);
+                sprintf(strsql,"update files set inode=%ld,size=%ld,modifyTime=from_unixtime(%ld),createTime=from_unixtime(%ld),accessTime=from_unixtime(%ld),mode=%d where files.id=%s",
+                        gs1->st_ino,gs1->st_size,gs1->st_mtime_sec,gs1->st_ctime_sec,gs1->st_atime_sec,gs1->st_mode,row[1]);
             }
             //printf("\nstrsql:%s\nlen of strsql:%d",strsql,strlen(strsql));
             if(mysql_query(my_conn,strsql)){
-                printf("\nupdate the meta data of file failed!!!");
+                printf("\nin muti:update the meta data of file failed!!!");
             }
             inodes[count]=gs1->st_ino;
-            printf("\nthe inodes:%ld,gs1_st_ino:%ld",inodes[count],gs1->st_ino);
+            //printf("\nin muti:the inodes:%ld,gs1_st_ino:%ld",inodes[count],gs1->st_ino);
             //TODO:restore file from base image
             count++;
             if(md5str!=NULL){
@@ -170,9 +179,9 @@ void *multi_read_image_file(void *var){
         }else{/**该文件在镜像中不存在,status=-1*/
             sprintf(strsql,"update files set status=-1 where files.id=%s",row[1]);
             if(mysql_query(my_conn,strsql)){
-                printf("\nupdate the status of file failed!!!");
+                printf("\nin muti:update the status of file failed!!!");
             }
-            printf("\nthe file don't exist in image!");
+            printf("\nin muti:the file don't exist in image!");
         }
         //guestfs_free_statns(gs1);
     }
@@ -184,7 +193,19 @@ void *multi_read_image_file(void *var){
     }
     inodes[count]=0;
     for(i=0;i<count;i++)printf("\n i:%d,inode:%ld",i,inodes[i]);
-    ext2_update_file_metadata(overlay_image_path,base_image_path,inodes,count,overlay_image_id);
+
+    type=get_filesystem_type(overlay_image_id);
+    //printf("\ntype:%s",type);
+    if(type!=NULL && strcmp(type,"EXT2")==0){
+        printf("\nin muti: EXT2!!!");
+        ext2_update_file_metadata(overlay_image_path,base_image_path,inodes,count,overlay_image_id);
+    }else if(type!=NULL && strcmp(type,"NTFS")==0){
+        printf("\nin muti: NTFS!!!");
+        ntfs_update_file_metadata(overlay_image_path,base_image_path,inodes,count,overlay_image_id);
+    }else{
+        printf("\nin muti: unknown file system!");
+    }
+
     free(inodes);
     //for(i=0;inodes[i];i++)printf("\n inode %d:%d",i,inodes[i]);
     /****************************************使用guestfs读取文件inode元信息，更新文件状态***end***********************************************/
@@ -192,14 +213,14 @@ void *multi_read_image_file(void *var){
 
     sprintf(strsql,"select files.absPath,files.hash,files.id from files join overlays where overlays.id=files.overlayId and files.dataPosition=2 and files.status=1 and overlays.id=%s",overlay_image_id);
     if(mysql_query(my_conn,strsql)){
-        printf("\nin multi: query the image overlay file failed!");
+        printf("\nin multi: query the file in overlay failed!");
         goto check_md5_failed;
     }
     res=mysql_store_result(my_conn);
     count=mysql_num_rows(res);
     /**该镜像无内容在增量中的文件*/
     if(count<=0){
-        printf("\nin multi:no overlay file which data in overlay,thread exit!");
+        printf("\nin multi:no overlay file,thread exit!");
         goto normal;
     }
     while((row=mysql_fetch_row(res))){
