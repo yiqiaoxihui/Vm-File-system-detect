@@ -153,6 +153,9 @@ int ext2_update_file_metadata(char *overlay_image_path,char base_image_path[],__
                         goto fail;
                     }
                 }else if(eh->eh_depth>0 && eh->eh_entries>0){
+                    /**
+                     *索引节点块的位置应该和数据块位置一致
+                     */
                     printf("\nblock offset in the index block!!!");
                     //it is index node,
                     ext_idx = EXT_FIRST_INDEX(eh);
@@ -162,6 +165,7 @@ int ext2_update_file_metadata(char *overlay_image_path,char base_image_path[],__
                         //printf("\n *********************data blocks in overlay!!!******************");
                         printf("\n *********************文件内容在增量镜像中，需要进行特征值比较!!!******************");
                         //inodePosition,dataPosition
+                        //TODO need backup file in host
                         sql_update_file_metadata(overlay_id,inodes[i],2,2);
                     }else if(block_status==0){
                         //printf("\n *********************data blocks in baseImage!!!******************");
@@ -417,14 +421,13 @@ int ext2_inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_of
             where overlays.id=%s and overlays.baseImageId=baseImages.id",overlay_image_id);
     if(mysql_query(my_conn,strsql)){
         printf("\n query baseImages and overlays failed!baseImageId:%s",overlay_image_id);
-        fclose(l_fp);
         mysql_close(my_conn);
         return -1;
     }
     res=mysql_use_result(my_conn);
     row=mysql_fetch_row(res);
     if(row!=NULL){
-        base_image_name=row[0];
+        base_image_name=row[2];
         overlay_image_path=row[1];
         strcpy(base_image_path,row[2]);
         //printf("\n<<<<<<<<<<<<<<<<<<<<<base image path:%s>>>>>>>>>>>>>>>>",*base_image_path);
@@ -436,9 +439,7 @@ int ext2_inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_of
         }
         if(fread(&header,sizeof(struct QCowHeader),1,l_fp)<=0){
             printf("\n read qcow2header failed!");
-            mysql_close(my_conn);
-            fclose(l_fp);
-            return -1;
+            goto fail;
         }
         header.backing_file_offset=__bswap_64(header.backing_file_offset);
         header.backing_file_size=__bswap_32(header.backing_file_size);
@@ -448,30 +449,31 @@ int ext2_inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_of
         read_backingfile_name=(char *)malloc(header.backing_file_size+1);
         if(fgets(read_backingfile_name,header.backing_file_size+1,l_fp)==NULL){
             printf("\n read backingfile name error!");
-            goto fail;
+            goto fail0;
         }
         //printf("\n size:%d,backing file name:%s,string len %ld",header.backing_file_size,read_backingfile_name,sizeof(read_backingfile_name));
+        //strstr judge whether str1 contains str2
         if(strstr(base_image_name,read_backingfile_name)==NULL){
             //printf("\n wrong overlay images!");
-            goto fail;
+            goto fail0;
         }else{
             //printf("\nbaseimage and overlay image are identical!");
-            fclose(l_fp);
-            free(read_backingfile_name);
-            mysql_close(my_conn);
-            return 1;
+            goto back;
         }
     }else{
         printf("\n the record of base image join overlay image is empty!");
-        fclose(l_fp);
-        mysql_close(my_conn);
-        return -1;
+        goto fail;
     }
-    return -1;
-fail:
+back:
     fclose(l_fp);
     mysql_close(my_conn);
     free(read_backingfile_name);
+    return 1;
+fail0:
+    free(read_backingfile_name);
+fail:
+    fclose(l_fp);
+    mysql_close(my_conn);
     return -1;
  }
 

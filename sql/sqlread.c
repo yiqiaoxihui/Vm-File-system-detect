@@ -1,5 +1,52 @@
 #include "sqlread.h"
-
+/*
+ *author:liuyang
+ *date  :2017/5/4
+ *detail:get server host backup root
+ *return void
+ */
+int sql_get_backup_root(char **backupRoot){
+    char hostName[32];
+    long int hostId;
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    my_conn=mysql_init(NULL);
+    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    {
+        printf("\nConnect Error!");
+        return -1;
+    }
+    //read server host name and host id
+    if(gethostname(hostName,sizeof(hostName))){
+        perror("gethostname!");
+        goto fail;
+    }
+    hostId=gethostid();
+    //查询数据库中是否有该服务器
+    char strsql[256];
+    sprintf(strsql,"select servers.backupRoot from servers where serverNumber=%d and name='%s'",hostId,hostName);
+    //printf("%s",strsql);
+    if(mysql_query(my_conn,strsql)) //连接baseImages表
+    {
+        printf("Query Error,query server backup root!");
+        goto fail;
+    }
+    res=mysql_store_result(my_conn); //取得表中的数据并存储到res中,mysql_use_result
+    if(mysql_num_rows(res)<=0){//
+        printf("\nerror:the server not exist!");
+        goto fail;
+    }else{
+        row=mysql_fetch_row(res);//打印结果
+        *backupRoot=malloc(strlen(row[0])+1);
+        strcpy(*backupRoot,row[0]);
+    }
+    mysql_close(my_conn);
+    return 1;
+fail:
+    mysql_close(my_conn);
+    return -1;
+}
 /*
  *author:liuyang
  *date  :2017/3/19
@@ -231,14 +278,16 @@ fail0:
     MYSQL_RES *res;
     MYSQL_ROW row;
     char strsql[256];
+    int baseHas=0;
     my_conn=mysql_init(NULL);
     if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
     {
         printf("\nConnect Error!");
         return 0;
     }
+    /**************************************根据检测结果更新文件位置**************************************/
     sprintf(strsql,"update files join overlays \
-            set inodePosition=%d,dataPosition=%d \
+            set inodePosition=%d,dataPosition=%d\
             where overlays.id=%s and overlays.id=files.overlayId and files.inode=%ld",inodePosition,dataPosition,overlay_id,inode_number);
     if(mysql_query(my_conn,strsql)){
         printf("in sql_update_file_metadata update failed!");
@@ -246,6 +295,31 @@ fail0:
     }
     if(mysql_affected_rows(my_conn)>=0){
         printf("\n%d update successfully,leave sql_update_file_metadata.......\n\n\n\n\n\n",mysql_affected_rows(my_conn));
+    }
+    /**************************************首次检测时，根据检测结果，单向判断文件是否在原始镜像中**************************************/
+    if(inodePosition==1 || dataPosition==1){
+        baseHas=1;
+    }
+    sprintf(strsql,"select files.firstAddFlag from files join overlays where overlays.id=%s and overlays.id=files.overlayId and files.inode=%ld",overlay_id,inode_number);
+    if(mysql_query(my_conn,strsql)){
+        printf("in sql_update_file_metadata  query file firstAddFlag failed!");
+        goto fail;
+    }
+    res=mysql_store_result(my_conn);
+    if(mysql_num_rows(res)<=0){
+        printf("\n can not find the file system type!");
+        goto fail;
+    }
+    row=mysql_fetch_row(res);
+    if(strcmp(row[0],"0")==0){
+        sprintf(strsql,"update files join overlays set files.firstAddFlag=1,files.baseHas=%d where overlays.id=%s and overlays.id=files.overlayId and files.inode=%ld",baseHas,overlay_id,inode_number);
+        if(mysql_query(my_conn,strsql)){
+            printf("in sql_update_file_metadata update failed!");
+            goto fail;
+        }
+        if(mysql_affected_rows(my_conn)>=0){
+            printf("\nupdate successfully,the file is the first  time detected,leave sql_update_file_metadata.......\n\n\n\n\n\n");
+        }
     }
     mysql_close(my_conn);
     return 1;
@@ -259,13 +333,13 @@ fail:
  *detail:获取文件类型
  *return char*
  */
-char* get_filesystem_type(char *overlayid){
+int get_filesystem_type(char *overlayid,char **type){
     //printf("\n\n\n\n\nbegin get_filesystem_type......%s",overlayid);
     MYSQL *my_conn;
     MYSQL_RES *res;
     MYSQL_ROW row;
     char strsql[512];
-    char *type=NULL;
+    //char *type=NULL;
     my_conn=mysql_init(NULL);
     int count=0;
     if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
@@ -286,19 +360,20 @@ char* get_filesystem_type(char *overlayid){
         goto fail;
     }
     row=mysql_fetch_row(res);
-    type=row[0];
+    strcpy(*type,row[0]);
     printf("\nthe file system type:%s",row[0]);
-    if(strcmp(type,"EXT2")==0){
-        type="EXT2";
+    if(strcmp(*type,"EXT2")==0){
+        strcpy(*type,"EXT2");
     }else if(strcmp(type,"NTFS")==0){
-        type="NTFS";
+        strcpy(*type,"NTFS");
     }else{
-        type="";
+        strcpy(*type,"");
     }
-    printf("\nleave get_filesystem_type.....%s\n\n\n\n",type);
     mysql_close(my_conn);
-    return type;
+    printf("\nleave get_filesystem_type.....%s\n\n\n\n",*type);
+    return 1;
 fail:
     mysql_close(my_conn);
-    return NULL;
+    return -1;
 }
+

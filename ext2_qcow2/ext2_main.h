@@ -33,7 +33,6 @@ int is_base_image_identical(char *overlay_image_id,char base_image_path[]);
 
 int ext2_update_file_metadata(char *overlay_image_path,char base_image_path[],__U64_TYPE inodes[],int inode_count,char *overlay_id);
 
-char* get_filesystem_type(char *overlayid);
 //void statistics_proportion();
 //
 //void allfile_md5();

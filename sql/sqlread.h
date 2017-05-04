@@ -9,4 +9,8 @@ int read_host_image_name(char **image_abspath,char **image_id);
 
 
 int sql_update_file_metadata(char *overlay_id,__U64_TYPE inode_number,int inodePosition,int dataPosition);
+
+int get_filesystem_type(char *overlayid,char **type);
+
+int sql_get_backup_root(char **backupRoot);
 #endif // CSQL_H_INCLUDED
