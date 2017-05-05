@@ -120,7 +120,6 @@ int sql_get_base_image_path(char **base_image_path,int *image_count){
     }
     count=0;
     while((row=mysql_fetch_row(res))){
-        baseImage_status=atoi(row[1]);
         /**first,judge the base image is exist or not!*/
         fp=fopen(row[0],"r");
         if(fp==NULL){

@@ -15,7 +15,7 @@ int main()
     //statistics_proportion();
     return 0;
 }
-/*
+/**
  *author:liuyang
  *date  :2017/3/21
  *detail:拉取该节点增量镜像，开启多线程处理
@@ -29,8 +29,19 @@ int key_files_detect(){
     int i;
     int thread_create;
     base_abspath=malloc((MAX_BASE_IMAGES+1)*sizeof(char *));
+    if(base_abspath==NULL){
+        printf("\nmalloc base image path failed!");
+    }
     if(sql_get_base_image_path(base_abspath,&images_count)<=0){
         printf("\nread base image for restore file failed!");
+    }
+
+    global_biga.baseImageGuestfs=malloc(images_count*sizeof(struct BaseImageGuestfs));
+    global_biga.len=images_count;
+    for(i=0;i<images_count;i++){
+        //printf("\ni:%d,base image:%s",i,base_abspath[i]);
+        global_biga.baseImageGuestfs[i].g=NULL;
+        global_biga.baseImageGuestfs[i].base_image_name=base_abspath[i];
     }
 
     /******指针空间必须在主函数中分配??*******/
@@ -63,14 +74,24 @@ int key_files_detect(){
     for(i=0;i<images_count;i++){
         pthread_join(read_image_thread[i],NULL);
     }
-
+    /**关闭原始镜像guestfs_h句柄*/
+    for(i=0;i<global_biga.len;i++){
+        //printf("\ni:%d,base image:%s",i,base_abspath[i]);
+        if(global_biga.baseImageGuestfs[i].g!=NULL){
+            printf("\n%s guestfs_h have been closed now!",global_biga.baseImageGuestfs[i].base_image_name);
+            guestfs_umount(global_biga.baseImageGuestfs[i].g,"/");
+            guestfs_shutdown(global_biga.baseImageGuestfs[i].g);
+            guestfs_close(global_biga.baseImageGuestfs[i].g);
+        }
+    }
+    free(base_abspath);
     free(image_abspath);
     free(image_id);
     free(threadVar);
     free(read_image_thread);
     return 1;
 }
-/*
+/**
  *author:liuyang
  *date  :2017/3/21
  *detail:多线程读取多个镜像，更新监控文件信息
@@ -187,7 +208,7 @@ void *multi_read_image_file(void *var){
     file_is_modified_by_md5(g,my_conn,res,row,strsql,overlay_image_id);
     free(inodes);
     /****************************************检查是否有需要还原的文件，开始尝试还原**************************************************/
-    file_restore(g,my_conn,res,row,strsql,overlay_image_path,base_image_path);
+    file_restore(g,my_conn,res,row,strsql,overlay_image_id,base_image_path);
 normal:
     guestfs_umount(g,"/");
     guestfs_shutdown(g);
@@ -196,19 +217,52 @@ normal:
     printf("\nleaven multi thread.......\n\n\n\n\n\n");
     pthread_exit(0);
 }
-/*
+/**
+ *author:liuyang
+ *date  :2017/5/5
+ *detail:get the base image guestfs_h,if not exist,create it
+ *return guestfs_h*
+ */
+guestfs_h* get_baseimage_guestfs_h(char *base_image_path){
+    int i;
+
+    for(i=0;i<global_biga.len;i++){
+        if(strcmp(global_biga.baseImageGuestfs[i].base_image_name,base_image_path)==0){
+            if(global_biga.baseImageGuestfs[i].g==NULL){
+
+                global_biga.baseImageGuestfs[i].g=guestfs_create();
+                if(guestfs_add_drive(global_biga.baseImageGuestfs[i].g,base_image_path)!=0){
+                    printf("\nguestfs_add_drive failed!");
+                    return NULL;
+                }
+                guestfs_launch(global_biga.baseImageGuestfs[i].g);
+                guestfs_mount(global_biga.baseImageGuestfs[i].g,"/dev/sda1","/");
+                printf("\n%s guestfs_h builds successfully,return it!\n\n\n\n\n\n",base_image_path);
+                return global_biga.baseImageGuestfs[i].g;
+            }else{
+                printf("\n%s guestfs_h have builded,return it!\n\n\n\n\n",base_image_path);
+                return global_biga.baseImageGuestfs[i].g;
+            }
+        }
+    }
+
+fail:
+    return NULL;
+}
+/**
  *author:liuyang
  *date  :2017/5/4
  *detail:begin file restore for the file need to restore
  *return void
  */
-int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char strsql[],char *overlay_image_path,char *base_image_path){
-    printf("\n\n\n\n\nbegin file restore!");
+int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char strsql[],char *overlay_image_id,char *base_image_path){
+    //printf("\n\n\n\n\nbegin file restore!");
     int baseHas=0;
+    int flag=1;
     char dir_name[128]={NULL};
     char *backupRoot=NULL;
     char *filename;
-    guestfs_h *gb=guestfs_create();
+    guestfs_h *gb;
     /*获取并判断备份根目录是否存在*/
     sql_get_backup_root(&backupRoot);
     printf("\nbackupRoot:%s",backupRoot);
@@ -221,7 +275,7 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
         printf("\nget server host backup root failed!");
         return -1;
     }
-    sprintf(strsql,"select files.absPath,files.baseHas,overlays.backupPath from files join overlays where files.restore=1 and files.overlayId=overlays.id");
+    sprintf(strsql,"select files.absPath,files.baseHas,overlays.backupPath from files join overlays where  overlays.id=%s and files.overlayId=overlays.id and files.restore=1",overlay_image_id);
     if(mysql_query(my_conn,strsql)){
         printf("\nquery file need restore failed!");
         return -1;
@@ -232,13 +286,16 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
         return 0;
     }
     printf("\n\n\n\n\nbegin file restore.....");
-    if(guestfs_add_drive(gb,base_image_path)!=0){
-        printf("\nguestfs_add_drive failed!");
-        return -1;
-    }
-    printf("\nbase image:%s",base_image_path);
-    guestfs_launch(gb);
-    guestfs_mount(gb,"/dev/sda1","/");
+
+    //printf("\nbase image:%s",base_image_path);
+    /**
+     *多线程共享变量需要互斥锁
+     *否则会造成句柄创建分配混乱
+     */
+    pthread_mutex_lock(&global_biga_mutex);
+    gb=get_baseimage_guestfs_h(base_image_path);
+    pthread_mutex_unlock(&global_biga_mutex);
+
     while(row=mysql_fetch_row(res)){
         /*创建增量镜像备份文件夹*/
         strcpy(dir_name,backupRoot);
@@ -251,19 +308,22 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
             strcat(dir_name,"/temp");
             mkdir(dir_name,S_IREAD|S_IWUSR|S_IXUSR);
         }
+        strcat(dir_name,"/temp");
         baseHas=atoi(row[2]);
         filename=strrchr(row[0], '/');
         strcat(dir_name,filename);
 
-        //printf("\nfile name:%s",filename);
+        printf("\nfile path :%s",dir_name);
 
+        pthread_mutex_lock(&global_biga_mutex);
         guestfs_download(gb,row[0],dir_name);
+        pthread_mutex_unlock(&global_biga_mutex);
 
         dir_name[0]=NULL;
     }
 
 }
-/*
+/**
  *author:liuyang
  *date  :2017/5/4
  *detail:judge file modified by md5,just for file in overlay
@@ -279,7 +339,7 @@ int file_is_modified_by_md5(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW
     res=mysql_store_result(my_conn);
     /**该镜像无内容在增量中的文件*/
     if(mysql_num_rows(res)<=0){
-        printf("\nin multi:no overlay file,thread exit!");
+        printf("\nfile_is_modified_by_md5:no overlay file to be judge!");
         return 0;
     }
     while(row=mysql_fetch_row(res)){
@@ -295,7 +355,7 @@ int file_is_modified_by_md5(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW
             printf("\nthe hash consistency,file security!");
             sprintf(strsql,"update files set files.isModified=0 where files.id=%s",row[2]);
             if(mysql_query(my_conn,strsql)){
-                printf("\nin multi: modify file isModified=0 failed!");
+                printf("\nfile_is_modified_by_md5: modify file isModified=0 failed!");
                 continue;
             }
         }else{
@@ -309,7 +369,7 @@ int file_is_modified_by_md5(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW
     }
 
 }
-/*
+/**
  *author:liuyang
  *date  :2017/5/4
  *detail:update file info,espacially
