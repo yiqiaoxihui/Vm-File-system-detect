@@ -1,6 +1,61 @@
 #include "sqlread.h"
 /*
  *author:liuyang
+ *date  :2017/5/5
+ *detail:file restore successful,update file info,modified=0,status=1
+ *return void
+ */
+int sql_file_restore_success(char *file_id,int restoreType){
+    printf("\n\n\n\n\nbegin sql file restore success........");
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    char strsql[256];
+    my_conn=mysql_init(NULL);
+    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    {
+        printf("\nConnect Error!n");
+        exit(1);
+    }
+    sprintf(strsql,"update files set isModified=0,status=1,restore=0 where files.id=%s",file_id);
+    if(mysql_query(my_conn,strsql)) //连接baseImages表
+    {
+        printf("\nQuery Error,update file restore successful info failed!");
+        goto fail;
+    }
+    sprintf(strsql,"select restoreReason from fileRestore where fileId=%s",file_id);
+    if(mysql_query(my_conn,strsql)) //连接baseImages表
+    {
+        printf("\nquery Error,query file restore failed!");
+        goto fail;
+    }
+    res=mysql_store_result(my_conn); //取得表中的数据并存储到res中,mysql_use_result
+    if(mysql_num_rows(res)<=0){//
+        printf("\nnot find the restore file!");
+        goto fail;
+    }else{
+        row=mysql_fetch_row(res);//打印结果
+        sprintf(strsql,"insert into fileRestoreRecord (fileId,restoreReason,restoreType)values(%s,%s,%d)",file_id,row[0],restoreType);
+        if(mysql_query(my_conn,strsql)) //连接baseImages表
+        {
+            printf("\ninsert fileRestoreRecord failed!");
+            goto fail;
+        }
+    }
+    sprintf(strsql,"delete from fileRestore where fileId=%s",file_id);
+    if(mysql_query(my_conn,strsql)) //连接baseImages表
+    {
+        printf("\ndelete fileRestore failed!");
+        goto fail;
+    }
+    mysql_close(my_conn);
+    return 1;
+fail:
+    mysql_close(my_conn);
+    return -1;
+}
+/*
+ *author:liuyang
  *date  :2017/5/4
  *detail:get server host backup root
  *return void
@@ -65,6 +120,7 @@ int sql_get_base_image_path(char **base_image_path,int *image_count){
     MYSQL_RES *res;
     MYSQL_ROW row;
     FILE *fp;
+    char strsql[256];
     my_conn=mysql_init(NULL);
     if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
     {
@@ -80,7 +136,7 @@ int sql_get_base_image_path(char **base_image_path,int *image_count){
     printf("\nread server info,get the image........");
     hostId=gethostid();
     //查询数据库中是否有该服务器
-    char strsql[256];
+
     sprintf(strsql,"select servers.id from servers where serverNumber=%d and name='%s'",hostId,hostName);
     //printf("%s",strsql);
     if(mysql_query(my_conn,strsql)) //连接baseImages表

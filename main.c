@@ -204,11 +204,11 @@ void *multi_read_image_file(void *var){
     free(type);
 
     //for(i=0;inodes[i];i++)printf("\n inode %d:%d",i,inodes[i]);
-    /****************************************读取数据库位于增量中的文件，计算哈希对比是否被篡改******************************************/
-    file_is_modified_by_md5(g,my_conn,res,row,strsql,overlay_image_id);
     free(inodes);
     /****************************************检查是否有需要还原的文件，开始尝试还原**************************************************/
     file_restore(g,my_conn,res,row,strsql,overlay_image_id,base_image_path);
+    /****************************************读取数据库位于增量中的文件，计算哈希对比是否被篡改******************************************/
+    file_is_modified_by_md5(g,my_conn,res,row,strsql,overlay_image_id);
 normal:
     guestfs_umount(g,"/");
     guestfs_shutdown(g);
@@ -275,14 +275,14 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
         printf("\nget server host backup root failed!");
         return -1;
     }
-    sprintf(strsql,"select files.absPath,files.baseHas,overlays.backupPath from files join overlays where  overlays.id=%s and files.overlayId=overlays.id and files.restore=1",overlay_image_id);
+    sprintf(strsql,"select files.absPath,files.baseHas,overlays.backupPath,files.status,files.id from files join overlays where  overlays.id=%s and files.overlayId=overlays.id and files.restore=1",overlay_image_id);
     if(mysql_query(my_conn,strsql)){
         printf("\nquery file need restore failed!");
         return -1;
     }
     res=mysql_store_result(my_conn);
     if(mysql_num_rows(res)<=0){
-        printf("\nin multi:no file need to restore,return!");
+        printf("\nin multi:no file need to restore,return........\n\n\n\n\n\n\n");
         return 0;
     }
     printf("\n\n\n\n\nbegin file restore.....");
@@ -318,7 +318,32 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
         pthread_mutex_lock(&global_biga_mutex);
         guestfs_download(gb,row[0],dir_name);
         pthread_mutex_unlock(&global_biga_mutex);
+        if(access(dir_name,0)!=0){
+            printf("\noverlay id:%s;file %s not in base image,need restore by host backup!",overlay_image_id,row[0]);
+            //TODO restore from local host backup
+        }else{
+            printf("\n\n\n\n\n\noverlay id:%s;file %s in base image,have download!",overlay_image_id,row[0]);
+            if(atoi(row[3])==-1){
+                printf("\nfile %s lost,upload directly!",row[0]);
+                if(guestfs_upload(g,dir_name,row[0])==0){
+                    printf("\nfile upload successful!!!");
+                }
+                //fileid,restoreType
+                /**更新文件信息*/
+                sql_file_restore_success(row[4],1);
+            }else{
+                printf("\nfile %s is modified,delete firstly,then upload!",row[0]);
+                if(guestfs_rm(g,row[0])==0){
+                    printf("\nfile delete successfully!");
+                }
+                if(guestfs_upload(g,dir_name,row[0])==0){
+                    printf("\nfile upload successfully!!!");
+                    /**更新文件信息*/
+                    sql_file_restore_success(row[4],1);
+                }
+            }
 
+        }
         dir_name[0]=NULL;
     }
 
