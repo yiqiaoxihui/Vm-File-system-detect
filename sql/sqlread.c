@@ -49,6 +49,104 @@ fail:
 }
 /*
  *author:liuyang
+ *date  :2017/5/5
+ *detail:get base image path and count
+ *return 1:success,<=0:failed
+ */
+int sql_get_base_image_path(char **base_image_path,int *image_count){
+    //host name
+    char hostName[32];
+    long int hostId;
+    unsigned long count;
+    int i;
+    int serverId;
+    //char *baseImages;
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    FILE *fp;
+    my_conn=mysql_init(NULL);
+    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    {
+        printf("Connect Error!n");
+        exit(1);
+    }
+    /***********************************check whether the host exist in database***********************************/
+    //read server host name and host id
+    if(gethostname(hostName,sizeof(hostName))){
+        perror("get host name failed!");
+        goto fail0;
+    }
+    printf("\nread server info,get the image........");
+    hostId=gethostid();
+    //查询数据库中是否有该服务器
+    char strsql[256];
+    sprintf(strsql,"select servers.id from servers where serverNumber=%d and name='%s'",hostId,hostName);
+    //printf("%s",strsql);
+    if(mysql_query(my_conn,strsql)) //连接baseImages表
+    {
+        printf("Query Error,query server failed!n");
+        goto fail0;
+    }
+    res=mysql_store_result(my_conn); //取得表中的数据并存储到res中,mysql_use_result
+    count=mysql_num_rows(res);
+    if(count<=0){//
+        printf("\n error:the server not exist!");
+        goto fail0;
+    }else if(count>1){
+        printf("\n error:the server id repeat!");
+        goto fail0;
+    }else{
+        row=mysql_fetch_row(res);//打印结果
+        serverId=atoi(row[0]);
+        //printf("\n host_status:%d,serverId:%d",host_status,serverId);
+    }
+    /************************************find the base images*****************************************/
+    //select the baseImage by host id
+    sprintf(strsql,"select baseImages.absPath,baseImages.status,baseImages.id\
+            from servers join baseImages      \
+            where servers.id=%d and servers.id=baseImages.server_id",serverId);
+    //printf("******************strsql***************:%s",strsql);
+    if(mysql_query(my_conn,strsql)){
+        printf("Query Error,query server images failed!");
+        goto fail0;
+    }
+    res=mysql_store_result(my_conn);
+    count=mysql_num_rows(res);
+    //printf("\n baseImages count:%d",count);
+    if(count<=0){
+        printf("\n no images in the host!");
+        goto fail0;
+    }
+    count=0;
+    while((row=mysql_fetch_row(res))){
+        baseImage_status=atoi(row[1]);
+        /**first,judge the base image is exist or not!*/
+        fp=fopen(row[0],"r");
+        if(fp==NULL){
+            //printf("\nthe base image:%s not exit!",row[0]);
+            sprintf(strsql,"update baseImages set status=-1 where id=%s",row[2]);
+            if(mysql_query(my_conn,strsql)){
+                printf("Query Error,update server images status=-1 failed!");
+            }
+            continue;
+        }else{
+            base_image_path[count]=malloc(strlen(row[0])+1);
+            strcpy(base_image_path[count],row[0]);
+            count++;
+            fclose(fp);
+        }
+    }
+    *image_count=count;
+    mysql_close(my_conn);
+    return 1;
+fail0:
+    *image_count=0;
+    mysql_close(my_conn);
+    return -1;
+}
+/*
+ *author:liuyang
  *date  :2017/3/19
  *detail:begin to read host image name
  *return 1:success,0:failed
@@ -147,6 +245,8 @@ fail:
                 printf("Query Error,update server images status=0 failed!");
             }
             fclose(fp);
+        }else{
+            fclose(fp);
         }
         if(baseImage_status==1){
             /**注意row[0]是char*类型，因此无需取地址*/
@@ -211,6 +311,8 @@ fail:
                 if(mysql_query(my_conn,strsql)){
                     printf("Query Error,update server images status=0 failed!");
                 }
+                fclose(fp);
+            }else{
                 fclose(fp);
             }
             if(overlayImage_status==1){

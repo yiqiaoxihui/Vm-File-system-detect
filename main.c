@@ -22,11 +22,17 @@ int main()
  *return 1
  */
 int key_files_detect(){
+    char **base_abspath;
     char **image_abspath;
     char **image_id;
-    int images_count=0;
+    int images_count;
     int i;
     int thread_create;
+    base_abspath=malloc((MAX_BASE_IMAGES+1)*sizeof(char *));
+    if(sql_get_base_image_path(base_abspath,&images_count)<=0){
+        printf("\nread base image for restore file failed!");
+    }
+
     /******指针空间必须在主函数中分配??*******/
     image_abspath=malloc((MAX_OVERLAY_IMAGES+1)*sizeof(char *));
     image_id=malloc((MAX_OVERLAY_IMAGES+1)*sizeof(char *));
@@ -35,6 +41,7 @@ int key_files_detect(){
         printf("\n read image abspath failed or no used images!");
         return 0;
     }
+    images_count=0;
     for(i=0;image_abspath[i];i++){
             printf("\n back to  key_files_detect, read image:%s",image_abspath[i]);
             images_count++;
@@ -200,6 +207,7 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
     int baseHas=0;
     char dir_name[128]={NULL};
     char *backupRoot=NULL;
+    char *filename;
     guestfs_h *gb=guestfs_create();
     /*获取并判断备份根目录是否存在*/
     sql_get_backup_root(&backupRoot);
@@ -207,7 +215,7 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
     if(backupRoot!=NULL){
         if(opendir(backupRoot)==NULL){
             printf("\nthe backup root not exist,creating......");
-            mkdir(backupRoot,7777);
+            mkdir(backupRoot,S_IREAD|S_IWUSR|S_IXUSR);
         }
     }else{
         printf("\nget server host backup root failed!");
@@ -228,6 +236,7 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
         printf("\nguestfs_add_drive failed!");
         return -1;
     }
+    printf("\nbase image:%s",base_image_path);
     guestfs_launch(gb);
     guestfs_mount(gb,"/dev/sda1","/");
     while(row=mysql_fetch_row(res)){
@@ -238,16 +247,19 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
         printf("\nthe hidden overlay dir in host:%s",dir_name);
         if(opendir(dir_name)==NULL){
             printf("\nhas not created overlay dir,begin create.....");
-            mkdir(dir_name,7777);
+            mkdir(dir_name,S_IREAD|S_IWUSR|S_IXUSR);
             strcat(dir_name,"/temp");
-            mkdir(dir_name,7777);
+            mkdir(dir_name,S_IREAD|S_IWUSR|S_IXUSR);
         }
         baseHas=atoi(row[2]);
-        if(baseHas==1){
+        filename=strrchr(row[0], '/');
+        strcat(dir_name,filename);
 
-            //guestfs_download(g,row[0],dir_name)
-        }
-         dir_name[0]=NULL;
+        //printf("\nfile name:%s",filename);
+
+        guestfs_download(gb,row[0],dir_name);
+
+        dir_name[0]=NULL;
     }
 
 }

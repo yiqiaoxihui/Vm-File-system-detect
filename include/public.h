@@ -22,5 +22,6 @@ int blockInOverlay_error;
 int inodeInOverlay_error;
 int magic_error;
 
-char overlay_filepath[3000][256];//TODO,
+
+char overlay_filepath[3000][256];//TODO
 #endif // PUBLIC_H_INCLUDED
