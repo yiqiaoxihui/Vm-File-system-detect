@@ -173,7 +173,7 @@ void *multi_read_image_file(void *var){
             inodes[count]=gs1->st_ino;
             count++;
         }else{/**该文件在镜像中不存在,status=-1*/
-            sprintf(strsql,"update files set status=-1 where files.id=%s",row[1]);
+            sprintf(strsql,"update files set lost=1 where files.id=%s",row[1]);
             if(mysql_query(my_conn,strsql)){
                 printf("\nin muti:update the status of file failed!!!");
             }
@@ -327,10 +327,13 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
                 printf("\nfile %s lost,upload directly!",row[0]);
                 if(guestfs_upload(g,dir_name,row[0])==0){
                     printf("\nfile upload successful!!!");
+                    /**更新还原信息*/
+                    sql_file_restore_result(row[4],1,1);
+                }else{
+                    sql_file_restore_result(row[4],1,-1);
                 }
                 //fileid,restoreType
-                /**更新文件信息*/
-                sql_file_restore_success(row[4],1);
+
             }else{
                 printf("\nfile %s is modified,delete firstly,then upload!",row[0]);
                 if(guestfs_rm(g,row[0])==0){
@@ -338,8 +341,10 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
                 }
                 if(guestfs_upload(g,dir_name,row[0])==0){
                     printf("\nfile upload successfully!!!");
-                    /**更新文件信息*/
-                    sql_file_restore_success(row[4],1);
+                    /**更新还原信息*/
+                    sql_file_restore_result(row[4],1,1);
+                }else{
+                    sql_file_restore_result(row[4],1,-1);
                 }
             }
 
@@ -388,7 +393,7 @@ int file_is_modified_by_md5(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW
             sprintf(strsql,"update files set files.isModified=1 where files.id=%s",row[2]);
             if(mysql_query(my_conn,strsql)){
                 printf("\nin multi: modify file isModified=1 failed!");
-                continue;
+
             }
         }
     }

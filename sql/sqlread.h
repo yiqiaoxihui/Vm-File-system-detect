@@ -14,5 +14,5 @@ int get_filesystem_type(char *overlayid,char **type);
 
 int sql_get_backup_root(char **backupRoot);
 
-int sql_file_restore_success(char *file_id,int restoreType);
+int sql_file_restore_result(char *file_id,int restoreType,int result);
 #endif // CSQL_H_INCLUDED

@@ -5,7 +5,7 @@
  *detail:file restore successful,update file info,modified=0,status=1
  *return void
  */
-int sql_file_restore_success(char *file_id,int restoreType){
+int sql_file_restore_result(char *file_id,int restoreType,int result){
     printf("\n\n\n\n\nbegin sql file restore success........");
     MYSQL *my_conn;
     MYSQL_RES *res;
@@ -17,7 +17,13 @@ int sql_file_restore_success(char *file_id,int restoreType){
         printf("\nConnect Error!n");
         exit(1);
     }
-    sprintf(strsql,"update files set isModified=0,status=1,restore=0 where files.id=%s",file_id);
+    if(result==1){
+        /**还原成功*/
+        sprintf(strsql,"update files set isModified=0,lost=0,restore=0 where files.id=%s",file_id);
+    }else{
+        /**还原失败*/
+        sprintf(strsql,"update files set restore=-1 where files.id=%s",file_id);
+    }
     if(mysql_query(my_conn,strsql)) //连接baseImages表
     {
         printf("\nQuery Error,update file restore successful info failed!");
@@ -35,7 +41,7 @@ int sql_file_restore_success(char *file_id,int restoreType){
         goto fail;
     }else{
         row=mysql_fetch_row(res);//打印结果
-        sprintf(strsql,"insert into fileRestoreRecord (fileId,restoreReason,restoreType)values(%s,%s,%d)",file_id,row[0],restoreType);
+        sprintf(strsql,"insert into fileRestoreRecord (fileId,restoreReason,restoreType,result,message)values(%s,%s,%d,%d,%d)",file_id,row[0],restoreType,result,0);
         if(mysql_query(my_conn,strsql)) //连接baseImages表
         {
             printf("\ninsert fileRestoreRecord failed!");
