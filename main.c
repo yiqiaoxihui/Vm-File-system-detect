@@ -5,12 +5,12 @@ int main()
 {
     //mtrace();
     /**关键文件检测*/
-    key_files_detect();
+    //key_files_detect();
     {   /**for test ntfs*/
         //unsigned long int inodes[2]={5625,10720};
         //ntfs_update_file_metadata("/var/lib/libvirt/images/winxp_snap1.img","/var/lib/libvirt/images/winxp.img",10720,1,11);
     }
-
+    overlay_md5("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap1.img");
     //allfile_md5();
     //statistics_proportion();
     return 0;
@@ -431,6 +431,7 @@ void update_file_info(guestfs_h *g,struct guestfs_statns *gs1,MYSQL *my_conn,cha
         md5str=NULL;
     }
 }
+
 /*
  *author:liuyang
  *date  :2017/3/28
