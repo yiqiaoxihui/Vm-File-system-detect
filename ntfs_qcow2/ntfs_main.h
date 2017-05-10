@@ -47,4 +47,12 @@ ntfs_attribute* ntfs_find_attr(struct ntfs_inode_info *ino,int type,char *name);
 int ntfs_ua_strncmp(short int* a,char* b,int n);
 
 int ntfs_blockInOverlay(char *qcow2Image,unsigned int block_offset,__U16_TYPE block_bits);
+
+/**
+ *author:liuyang
+ *date  :2017/5/10
+ *detail:
+ *return
+ */
+int ntfs_overlay_md5(char *baseImage,char *overlay);
 #endif // NTFS_MAIN_H_INCLUDED

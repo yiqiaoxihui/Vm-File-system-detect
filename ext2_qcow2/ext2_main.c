@@ -937,7 +937,7 @@ fail:
  *detail:cal overlay vm file md5
  *return void
  */
-int overlay_md5(char *baseImage,char *overlay){
+int ext2_overlay_md5(char *baseImage,char *overlay){
     /**ext2文件系统相关数据结构*/
     struct ext2_super_block *es;
     struct ext2_group_desc *group_desc_table;
@@ -984,26 +984,45 @@ int overlay_md5(char *baseImage,char *overlay){
     char file_name[256]={NULL};
     struct guestfs_statns *gs1;
     char **all_file_path;
+    printf("\nbegin to guestfs......");
+
+    guestfs_h *g=guestfs_create ();
+    guestfs_add_drive(g,overlay);
+    guestfs_launch(g);
+    guestfs_mount(g,"/dev/sda1","/");
+    printf("\nbegin to get all file......");
+    all_file_path=guestfs_find(g,"/");
     /***************************************************初始化文件系统信息**************************************************/
     bi_fp=fopen(baseImage,"r");
     if(bi_fp==NULL){
-        printf("\n error:open baseImage failed!");
-        return -1;
+        printf("\nerror:open baseImage failed!");
+        goto error;
     }
     //printf("\n***********************");
     //偏移到超级块
     if(fseek(bi_fp,EXT2_SUPERBLOCK_OFFSET,SEEK_SET)){
-        printf("\n seek to super block failed!");
+        printf("\nseek to super block failed!");
         goto fail;
     }
     /***************/
     es=(struct ext2_super_block*)malloc(sizeof(struct ext2_super_block));
+    if(es==NULL){
+        printf("\nallocate l1 table failed!");
+        goto fail_es;
+    }
     e_ino=(struct ext2_inode*)malloc(sizeof(struct ext2_inode));
+    if(e_ino==NULL){
+        printf("\nallocate e_ino failed!");
+        goto fail_inode;
+    }
     group_desc_table=malloc(block_size);
-
+    if(group_desc_table==NULL){
+        printf("\nallocate group_desc_table failed!");
+        goto fail_group_desc_table;
+    }
     if(fread(es,sizeof(struct ext2_super_block),1,bi_fp)<=0){
         printf("\n read to super block failed!");
-        goto fail0;
+        goto fail1;
     }
     block_bits=10+es->s_log_block_size;//12
     block_size=1<<block_bits;//4096
@@ -1016,18 +1035,22 @@ int overlay_md5(char *baseImage,char *overlay){
     fseek(bi_fp,_ext2_group_desc_offset(block_size),SEEK_SET);
     if(fread(group_desc_table,block_size,1,bi_fp)<=0){
         printf("\nread group descriptor entry failed!");
-        goto fail0;
+        goto fail1;
     }
     /***************************************************初始化增量镜像信息**************************************************/
     o_fp=fopen(overlay,"r");
     if(o_fp==NULL){
         printf("\n open overlay image failed!");
-        goto fail0;
+        goto fail1;
     }
     header=(struct QCowHeader*)malloc(sizeof(struct QCowHeader));
+    if(header==NULL){
+        printf("\nallocate qcowheader failed!");
+        goto fail_header;
+    }
     if(fread(header,sizeof(struct QCowHeader),1,o_fp)<=0){
         printf("\n read qcow2 header failed!");
-        goto fail1;
+        goto fail_read_header;
     }
     cluster_bits=__bswap_32(header->cluster_bits);
     CLUSTER_BYTES=1<<cluster_bits;
@@ -1041,14 +1064,23 @@ int overlay_md5(char *baseImage,char *overlay){
      */
     l1_table=malloc(l1_size*sizeof(__U64_TYPE));
     l2_tables=malloc(l1_size*sizeof(__U64_TYPE));
+    if(l1_table==NULL){
+        printf("\nallocate l1 table failed!");
+        goto fail_l1_table;
+    }
+    if(l2_tables==NULL){
+        printf("\nallocate l2 tables failed!");
+        goto fail_l2_tables;
+    }
     for(i=0;i<l1_size;i++){
         l2_tables[i]=malloc((1<<l2_bits)*sizeof(__U64_TYPE));
         if(l2_tables[i]==NULL){
             printf("\nmalloc l2 tables failed!");
             goto fail2;
         }
+        printf("\nmalloc the %d for l2_table!",i);
     }
-    //printf("\nl1 table size:%d",l1_size);
+
     if(fseek(o_fp,l1_table_offset,SEEK_SET)){
         printf("\nseek to l1 table failed!");
         goto fail2;
@@ -1061,11 +1093,13 @@ int overlay_md5(char *baseImage,char *overlay){
      *l2表读到内存中，加快速度
      */
 
+    printf("\nl1 table size:%d",l1_size);
     for(i=0;i<l1_size;i++){
         l1_table[i]=__bswap_64(l1_table[i]) & L1E_OFFSET_MASK;
         if(!l1_table[i]){
-            free(l2_tables[i]);
-            l2_tables[i]=NULL;
+            printf("\n%dthe l2 table not allocate!",i);
+            //free(l2_tables[i]);
+            //l2_tables[i]=NULL;
         }else{
             if(fseek(o_fp,l1_table[i],SEEK_SET)){
                 printf("\n%x:seek to l2 table failed!",l1_table[i]);
@@ -1075,14 +1109,11 @@ int overlay_md5(char *baseImage,char *overlay){
                 printf("\n%x:read the l2 table failed!",l1_table[i]);
                 goto fail2;
             }
+            printf("\nread the %i l2 table",i);
         }
+        printf("\nthe %d",i);
     }
-    printf("\nbegin to guestfs......");
-    guestfs_h *g=guestfs_create();
-    guestfs_add_drive(g,overlay);
-    guestfs_launch(g);
-    guestfs_mount(g,"/dev/sda1","/");
-    all_file_path=guestfs_find(g,"/");
+
     for(i=0;all_file_path[i];i++){
         sprintf(file_name,"/%s",all_file_path[i]);
         //sprintf(file_name,"/home/base/Desktop/a.txt");
@@ -1225,17 +1256,27 @@ int overlay_md5(char *baseImage,char *overlay){
         }
         //guestfs_free_statns_list(gs1);
     }
-    printf("\nall file:%d\nreg file:%d\nerror file:%d;overlay_file:%d\n",i,ext_all_file_count,ext_error_file_count,overlay_file_number);
+    printf("\nall file:%d\nregular file:%d\nerror file:%d;overlay_file:%d\n",i,ext_all_file_count,ext_error_file_count,overlay_file_number);
 //    if(gs1!=NULL){
 //        guestfs_free_statns_list(gs1);
 //    }
-
-    free(all_file_path);
 //    printf("\n增量文件占比:%.5f\%",(((float)overlay_file_count)/(all_file_count-error_file_count-read_error))*100);
-    if(md5str!=NULL){
-        free(md5str);
-    }
+//    if(md5str!=NULL){
+//        printf("\nfree last md5!");
+//        free(md5str);
+//    }
 out:
+    printf("\nout....");
+    for(i=0;all_file_path[i];i++){
+        free(all_file_path[i]);
+    }
+    free(all_file_path);
+    for(i=0;i<l1_size;i++){
+        if(l2_tables[i]!=NULL){
+            free(l2_tables[i]);
+        }
+    }
+    free(l2_tables);
     guestfs_umount (g, "/");
     guestfs_shutdown (g);
     guestfs_close (g);
@@ -1246,24 +1287,51 @@ out:
     free(es);
     free(header);
     free(l1_table);
-    free(l2_tables);
+    //free(l2_tables);
     return 1;
+
 fail2:
-    free(l1_table);
+    printf("\nfail_malloc_l2_tables....");
+    for(i=0;i<l1_size;i++){
+        if(l2_tables[i]!=NULL){
+            free(l2_tables[i]);
+        }
+    }
     free(l2_tables);
-fail1:
+fail_l2_tables:
+    //printf("\nfail malloc l2 table");
+    free(l1_table);
+fail_l1_table:
+
+fail_read_header:
+    //printf("\nfail_read_header....");
     free(header);
+fail_header:
+    //printf("\nfail malloc header....");
     fclose(o_fp);
-fail0:
-    free(e_ino);
+fail1:
     free(group_desc_table);
+fail_group_desc_table:
+    //printf("\nfail malloc group_desc_table....");
+    free(e_ino);
+fail_inode:
+    //printf("\nfail malloc inode....");
     free(es);
+fail_es:
 fail:
+    //printf("\nfail....");
     fclose(bi_fp);
+error:
+    printf("\nerror....");
+    for(i=0;all_file_path[i];i++){
+        free(all_file_path[i]);
+    }
+    free(all_file_path);
     return -1;
 //    fclose(fp);
 //    free(md5str);
 }
+
 int init_ext2_filesystem(){
 
     return 1;

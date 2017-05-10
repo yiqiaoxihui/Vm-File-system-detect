@@ -1,5 +1,465 @@
 #include "ntfs_main.h"
+/*
+ *author:liuyang
+ *date  :2017/4/18
+ *detail: 判断文件记录是否在增量中
+ *return
+ */
+int ntfs_inode_in_overlay(char *overlay_image_path,struct ntfs_inode_info *ntfs_inode){
+    __U32_TYPE cluster_offset;
+    __U32_TYPE byte_offset_into_cluster;
+    FILE *l_fp;
+    QCowHeader header;
+    __U32_TYPE CLUSTER_BITS;
+    __U32_TYPE CLUSTER_BYTES;
+    __U32_TYPE l1_index;
+    __U32_TYPE l2_index;
+    __U64_TYPE L1_TABLE_OFFSET;
+    __U32_TYPE L2_BITS;
+    __U64_TYPE l1_entry_offset;
+    __U64_TYPE l2_table_offset;
+    __U64_TYPE l2_entry_offset;
+    __U64_TYPE data_offset;//data offset,Must be aligned to a cluster boundary.
+    if(ntfs_inode==NULL){
+        printf("\nntfs_inode_in_overlay error:ntfs inode null!");
+        goto fail;
+    }
+    l_fp=fopen(overlay_image_path,"r");
+    if(l_fp==NULL){
+        printf("\nntfs_inode_in_overlay error:open overlay image failed!");
+        goto fail;
+    }
+    /***************************读取增量镜像header结构体**************************************************/
+    if(fread(&header,sizeof(struct QCowHeader),1,l_fp)<=0){
+        printf("\n read qcow2header failed!");
+        goto fail0;
+    }
+    header.version=__bswap_32(header.version);
+    printf("\nthe magic:%x",header.version);
+    L1_TABLE_OFFSET=__bswap_64(header.l1_table_offset);
+//    header->backing_file_offset=__bswap_64(header->backing_file_offset);
+//    header->backing_file_size=__bswap_32(header->backing_file_size);
+    CLUSTER_BITS=__bswap_32(header.cluster_bits);
+    CLUSTER_BYTES=1<<CLUSTER_BITS;
+    L2_BITS=CLUSTER_BITS-3;
+    cluster_offset=((float)NTFS_OFFSET)/CLUSTER_BYTES+
+                                            ((float)ntfs_inode->i_number)/(CLUSTER_BYTES/ntfs_inode->vol->mft_recordsize)+
+                                                    ((float)ntfs_inode->vol->mft_cluster)/(CLUSTER_BYTES/ntfs_inode->vol->clustersize);
+//    printf("\nNTFS OFFSET:%f\nntfs inode:%f\nmft begin:%f",
+//           ((float)NTFS_OFFSET)/(1<<CLUSTER_BITS),
+//           ((float)ntfs_inode->i_number)/((1<<CLUSTER_BITS)/ntfs_inode->vol->mft_recordsize),
+//           ((float)ntfs_inode->vol->mft_cluster)/((1<<CLUSTER_BITS)/ntfs_inode->vol->clustersize));
+    printf("\ncluster offset:%d",cluster_offset);
+    byte_offset_into_cluster=(NTFS_OFFSET % CLUSTER_BYTES +
+                        ((ntfs_inode->i_number % CLUSTER_BYTES)*(ntfs_inode->vol->mft_recordsize%CLUSTER_BYTES))%CLUSTER_BYTES +
+                            ((ntfs_inode->vol->mft_cluster%CLUSTER_BYTES)*(ntfs_inode->vol->clustersize%CLUSTER_BYTES))%CLUSTER_BYTES)%CLUSTER_BYTES;
+    printf("\nbyte_offset_into_cluster:%x",byte_offset_into_cluster);
+    l1_index=cluster_offset>>L2_BITS;                                   /**l1表的偏移项数*/
+    l2_index=cluster_offset & ((1<<L2_BITS)-1);                         /**l2表的偏移项数*/
+    printf("\ncluster offset:%d\nl1 index:%d,l2 index:%x,\nblocks_bytes_into_cluster%x",cluster_offset,l1_index,l2_index<<3,byte_offset_into_cluster);
+    /*****************************************************读取l1表************************************************************/
+    l1_entry_offset=L1_TABLE_OFFSET+(l1_index<<3);
+    if(fseek(l_fp,l1_entry_offset,SEEK_SET)){
+        printf("\n seek to l1 offset failed!");
+        goto fail0;
+    }
+    if(fread(&l2_table_offset,sizeof(l2_table_offset),1,l_fp)<=0){
+        printf("\n read the l2 offset failed!");
+        goto fail0;
+    }
+    l2_table_offset=__bswap_64(l2_table_offset) & L1E_OFFSET_MASK;
+    printf("\nsize:%ld l2_table_offset:%lx",sizeof(l2_table_offset),l2_table_offset);
+    if(!l2_table_offset){
+        printf("\n l2 table has not been allocated,the data must in backing file!");
+        goto inbacking;
+    }
+    /*****************************************************读取l2表************************************************************/
+    l2_entry_offset=l2_table_offset+(l2_index<<3);
+    if(fseek(l_fp,l2_entry_offset,SEEK_SET)){
+        printf("\n seek to l2_entry_offset failed!");
+        goto fail0;
+    }
+    if(fread(&data_offset,sizeof(data_offset),1,l_fp)<=0){
+        printf("\n read data offset failed!");
+        goto fail0;
+    }
+    data_offset=__bswap_64(data_offset);
+    data_offset=data_offset&L2E_OFFSET_MASK;
+    if(!(data_offset & L2E_OFFSET_MASK)){
+        printf("\n l2 entry has not been allocated,the data must in backing file!");
+        goto inbacking;
+    }
+    printf("\nsize:%ld,the data offset:%x",sizeof(data_offset),data_offset);
 
+    if(fseek(l_fp,0,SEEK_SET)){
+        printf("\n seek to SEEK_SET failed!");
+        goto fail0;
+    }
+    if(fseek(l_fp,data_offset,SEEK_CUR)){
+        printf("\n seek to unsigned long int data_offset failed!");
+        goto fail0;
+    }
+    if(fseek(l_fp,byte_offset_into_cluster,SEEK_CUR)){
+        goto fail0;
+    }
+    if(fread(ntfs_inode->attr,ntfs_inode->vol->mft_recordsize,1,l_fp)<=0){
+        printf("\nerror: read file record failed!");
+        goto fail0;
+    }
+    fclose(l_fp);
+    return 1;
+inbacking:
+    fclose(l_fp);
+    return 0;
+fail0:
+    fclose(l_fp);
+fail:
+    return -1;
+}
+/*
+ *author:liuyang
+ *date  :2017/5/10
+ *detail:
+ *return
+ */
+int ntfs_overlay_md5(char *baseImage,char *overlay){
+    /**ntfs文件系统相关数据结构*/
+    ntfs_volume vol;
+    char ntfs_super_block[80];
+    __U16_TYPE ntfs_cluster_bits;
+    /**ntfs文件inode相关数据结构*/
+
+    /**增量镜像相关数据结构*/
+    QCowHeader *header;
+    __U32_TYPE cluster_bits;
+    __U32_TYPE l2_bits;
+    __U32_TYPE l1_size;
+    __U32_TYPE cluster_offset;
+    __U32_TYPE bytes_into_cluster;
+    __U64_TYPE l1_table_offset;
+    __U64_TYPE *l1_table;
+    __U64_TYPE **l2_tables;
+    __U32_TYPE l1_index;
+    __U32_TYPE l2_index;
+    __U64_TYPE l1_table_entry;
+    __U64_TYPE l2_table_entry;
+    __U32_TYPE CLUSTER_BYTES;
+    /**文件相关*/
+    struct ntfs_inode_info ino;
+    ntfs_attribute *attr;
+    __U32_TYPE data_cluster_offset;
+    char file_name[256]={NULL};
+    char *md5str;
+    int i;
+//    float all_file_count;
+    __U32_TYPE ext_error_file_count=0;
+    __U32_TYPE ext_all_file_count=0;
+    __U32_TYPE overlay_file_number=0;
+    __U32_TYPE inode_in_overlay_file_number=0;
+
+    FILE *bi_fp,*o_fp;
+    struct guestfs_statns *gs1;
+    char **all_file_path;
+    printf("\nbegin to guestfs......");
+
+    guestfs_h *g=guestfs_create ();
+    guestfs_add_drive(g,overlay);
+    guestfs_launch(g);
+    guestfs_mount(g,"/dev/sda1","/");
+    printf("\nbegin to get all file......");
+    all_file_path=guestfs_find(g,"/");
+    /***************************************************初始化ntfs文件系统信息**************************************************/
+    bi_fp=fopen(baseImage,"r");
+    if(bi_fp==NULL){
+        printf("\nerror:open baseImage failed!");
+        goto error;
+    }
+    /**偏移到ntfs文件系统开始*/
+    if(fseek(bi_fp,NTFS_OFFSET,SEEK_SET)){
+        printf("\n seek to ntfs super block failed!");
+        goto fail;
+    }
+    if(fread(ntfs_super_block,80,1,bi_fp)<=0){
+        printf("\n read to super block failed!");
+        goto fail;
+    }
+    ntfs_init_volume(&vol,ntfs_super_block);
+    printf("\nthe blocksize:%d\nclusterfactor:%d\n mft_cluster offset:%d\nmft_recordsize:%d,\nmft_clusters_per_record:%d\nclustersize:%d",
+           vol.blocksize,vol.clusterfactor,vol.mft_cluster,vol.mft_recordsize,vol.mft_clusters_per_record,vol.clustersize);
+
+    ino.vol=&vol;
+    /*all bit-1*/
+    BIT_1_POS(ino.vol->clustersize,ntfs_cluster_bits);
+    ino.attr=malloc(vol.mft_recordsize);
+    if(!ino.attr){
+        printf("\nmalloc error:malloc ino.attr failed!");
+        goto fail;
+    }
+    /***************************************************初始化增量镜像信息**************************************************/
+    o_fp=fopen(overlay,"r");
+    if(o_fp==NULL){
+        printf("\n open overlay image failed!");
+        goto fail1;
+    }
+    header=(struct QCowHeader*)malloc(sizeof(struct QCowHeader));
+    if(header==NULL){
+        printf("\nallocate qcowheader failed!");
+        goto fail_header;
+    }
+    if(fread(header,sizeof(struct QCowHeader),1,o_fp)<=0){
+        printf("\n read qcow2 header failed!");
+        goto fail_read_header;
+    }
+    cluster_bits=__bswap_32(header->cluster_bits);
+    CLUSTER_BYTES=1<<cluster_bits;
+    l1_table_offset=__bswap_64(header->l1_table_offset);
+    l2_bits=cluster_bits-3;
+
+    l1_size=__bswap_32(header->l1_size);
+    //printf("\n***********************l1_size:%d",l1_size);
+    /**
+     *将l1,l2表读到内存中，加快速度
+     */
+    l1_table=malloc(l1_size*sizeof(__U64_TYPE));
+    l2_tables=malloc(l1_size*sizeof(__U64_TYPE));
+    if(l1_table==NULL){
+        printf("\nallocate l1 table failed!");
+        goto fail_l1_table;
+    }
+    if(l2_tables==NULL){
+        printf("\nallocate l2 tables failed!");
+        goto fail_l2_tables;
+    }
+    for(i=0;i<l1_size;i++){
+        l2_tables[i]=malloc((1<<l2_bits)*sizeof(__U64_TYPE));
+        if(l2_tables[i]==NULL){
+            printf("\nmalloc l2 tables failed!");
+            goto fail2;
+        }
+        printf("\nmalloc the %d for l2_table!",i);
+    }
+
+    if(fseek(o_fp,l1_table_offset,SEEK_SET)){
+        printf("\nseek to l1 table failed!");
+        goto fail2;
+    }
+    if(fread(l1_table,sizeof(__U64_TYPE),l1_size,o_fp)<=0){
+        printf("\n read the l1 table failed!");
+        goto fail2;
+    }
+    /**
+     *l2表读到内存中，加快速度
+     */
+    printf("\nl1 table size:%d",l1_size);
+    for(i=0;i<l1_size;i++){
+        l1_table[i]=__bswap_64(l1_table[i]) & L1E_OFFSET_MASK;
+        if(!l1_table[i]){
+            printf("\n%dthe l2 table not allocate!",i);
+            //free(l2_tables[i]);
+            //l2_tables[i]=NULL;
+        }else{
+            if(fseek(o_fp,l1_table[i],SEEK_SET)){
+                printf("\n%x:seek to l2 table failed!",l1_table[i]);
+                goto fail2;
+            }
+            if(fread(l2_tables[i],sizeof(__U64_TYPE),1<<l2_bits,o_fp)<=0){
+                printf("\n%x:read the l2 table failed!",l1_table[i]);
+                goto fail2;
+            }
+            printf("\nread the %i l2 table",i);
+        }
+        printf("\nthe %d",i);
+    }
+
+    for(i=0;all_file_path[i];i++){
+        sprintf(file_name,"/%s",all_file_path[i]);
+        //sprintf(file_name,"/home/base/Desktop/a.txt");
+
+        gs1=guestfs_lstatns(g,file_name);
+        if(gs1==NULL){
+            ext_error_file_count++;
+            continue;
+        }
+        if(S_ISREG(gs1->st_mode)!=1){
+            //printf("\nfile:%s;\ninode:%d",file_name,gs1->st_ino);
+            continue;
+        }
+        ext_all_file_count++;
+        /*****************************开始计算inode结构位置*******************************/
+        //inode_number=gs1->st_ino;
+        ino.i_number=gs1->st_ino;//1072 80H non-resident
+
+        cluster_offset=((float)NTFS_OFFSET)/CLUSTER_BYTES+
+                                                ((float)ntfs_inode->i_number)/(CLUSTER_BYTES/ntfs_inode->vol->mft_recordsize)+
+                                                        ((float)ntfs_inode->vol->mft_cluster)/(CLUSTER_BYTES/ntfs_inode->vol->clustersize);
+    //    printf("\nNTFS OFFSET:%f\nntfs inode:%f\nmft begin:%f",
+    //           ((float)NTFS_OFFSET)/(1<<CLUSTER_BITS),
+    //           ((float)ntfs_inode->i_number)/((1<<CLUSTER_BITS)/ntfs_inode->vol->mft_recordsize),
+    //           ((float)ntfs_inode->vol->mft_cluster)/((1<<CLUSTER_BITS)/ntfs_inode->vol->clustersize));
+        printf("\ncluster offset:%d",cluster_offset);
+        bytes_into_cluster=(NTFS_OFFSET % CLUSTER_BYTES +
+                            ((ntfs_inode->i_number % CLUSTER_BYTES)*(ntfs_inode->vol->mft_recordsize%CLUSTER_BYTES))%CLUSTER_BYTES +
+                                ((ntfs_inode->vol->mft_cluster%CLUSTER_BYTES)*(ntfs_inode->vol->clustersize%CLUSTER_BYTES))%CLUSTER_BYTES)%CLUSTER_BYTES;
+        printf("\nbyte_offset_into_cluster:%x",byte_offset_into_cluster);
+        //((inode_blocks_offset&((1<<(cluster_bits-block_bits))-1))<<block_bits)+inode_bytes_into_block_of_inodetable;
+        //printf("\n:bytes_into_cluster%d",bytes_into_cluster);
+        l1_index=cluster_offset>>l2_bits;
+        l2_index=cluster_offset&((1<<l2_bits)-1);
+        l1_table_entry=l1_table[l1_index];
+        if(!l1_table_entry){
+            printf("\nl1 table entry not be allocated,inode in base!");
+            //continue;
+        }
+        l2_table_entry=__bswap_64(l2_tables[l1_index][l2_index])&L2E_OFFSET_MASK;
+        if(!l2_table_entry){
+            printf("\nl2 table entry not be allocated,inode in base!");
+            continue;
+        }
+        printf("\ninode_blocks_offset:%d,cluster_offset:%d,l1_index:%d,l2_index:%d",inode_blocks_offset,cluster_offset,l1_index,l2_index);
+//        printf("\ninode:l1_table_offset:%x",l1_table_entry);
+//        printf("\ninode:l2_table_offset:%x",l2_table_entry);
+        if(fseek(o_fp,l2_table_entry+bytes_into_cluster,SEEK_SET)){
+            printf("\nseek to l2 table entry failed!");
+            continue;
+        }
+        if(fread(ntfs_inode->attr,ntfs_inode->vol->mft_recordsize,1,o_fp)<=0){
+            printf("\nerror: read file record failed!");
+            continue;
+        }
+        /**
+         *inode在增量中
+         */
+        printf("\n*******************NTFS inode in overlay !");
+        if(!ntfs_check_mft_record(ino.vol,ino.attr,"FILE",ino.vol->mft_recordsize))
+        {
+            printf("Invalid MFT record corruption");
+
+            continue;
+        }
+        ino.sequence_number=NTFS_GETU16(ino.attr+0x10);
+        ino.attr_count=0;
+        ino.record_count=0;
+        ino.records=0;
+        ino.attrs=0;
+        ntfs_load_attributes(&ino);
+        //printf("\nthe runlist number:%d,cluster:%x",ino.attrs[1].d.r.len,ino.attrs[1].d.r.runlist[0].cluster);
+        /*查找文件80属性->文件内容*/
+        attr=ntfs_find_attr(&ino,ino.vol->at_data,0);
+        if(attr){
+            if(attr->resident==0){
+                printf("\非常驻80属性，文件内容在run list 中");
+                printf("\nsuccessful!the runlist number:%d,cluster:%x",attr->d.r.len,attr->d.r.runlist[0].cluster);
+                if(attr->d.r.len>0){
+                    data_cluster_offset=attr->d.r.runlist[0].cluster;
+                    printf("\ndata_cluster_offset:%x,%d;\nthe ntfs_cluster_bits:%d",data_cluster_offset,data_cluster_offset,ntfs_cluster_bits);
+                    cluster_offset=data_cluster_offset/(1<<(cluster_bits-ntfs_cluster_bits))+(float)NTFS_OFFSET/(1<<cluster_bits);
+                    l1_index=cluster_offset>>l2_bits;
+                    l2_index=cluster_offset&((1<<l2_bits)-1);
+                    l1_table_entry=l1_table[l1_index];
+                    if(!l1_table_entry){
+                        printf("\nl1 table entry not be allocated,inode in base!");
+                        continue;
+                    }
+                    l2_table_entry=__bswap_64(l2_tables[l1_index][l2_index])&L2E_OFFSET_MASK;
+                    if(!l2_table_entry){
+                        printf("\nl2 table entry not be allocated,inode in base!");
+                        continue;
+                    }
+                    /**
+                     *file data在增量中
+                     */
+                     overlay_file_number++;
+                     printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
+                     md5str=guestfs_checksum(g,"md5",file_name);
+                     if(md5str!=NULL){
+                        printf("\nfile:%s\nmd5:%s",file_name,md5str);
+                        free(md5str);
+                     }
+                }else{
+                    printf("\nntfs_update_file_metadata:run list problem!");
+                }
+            }else{
+                /**
+                 *file data在增量中
+                 */
+                 printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
+                 md5str=guestfs_checksum(g,"md5",file_name);
+                 if(md5str!=NULL){
+                    printf("\nfile:%s\nmd5:%s",file_name,md5str);
+                    free(md5str);
+                 }
+                printf("\nthe file data attribution is resident,file data must be in overlay!");
+            }
+        }else{
+            printf("\ncan not find file data attribution!");
+        }
+        //guestfs_free_statns_list(gs1);
+    }
+    printf("\nall file:%d\nregular file:%d\nerror file:%d;overlay_file:%d\n",i,ext_all_file_count,ext_error_file_count,overlay_file_number);
+//    if(gs1!=NULL){
+//        guestfs_free_statns_list(gs1);
+//    }
+//    printf("\n增量文件占比:%.5f\%",(((float)overlay_file_count)/(all_file_count-error_file_count-read_error))*100);
+//    if(md5str!=NULL){
+//        printf("\nfree last md5!");
+//        free(md5str);
+//    }
+out:
+    printf("\nout....");
+    for(i=0;all_file_path[i];i++){
+        free(all_file_path[i]);
+    }
+    free(all_file_path);
+    for(i=0;i<l1_size;i++){
+        if(l2_tables[i]!=NULL){
+            free(l2_tables[i]);
+        }
+    }
+    free(l2_tables);
+    guestfs_umount (g, "/");
+    guestfs_shutdown (g);
+    guestfs_close (g);
+    fclose(o_fp);
+    fclose(bi_fp);
+    free(e_ino);
+    free(group_desc_table);
+    free(es);
+    free(header);
+    free(l1_table);
+    //free(l2_tables);
+    return 1;
+
+fail2:
+    printf("\nfail_malloc_l2_tables....");
+    for(i=0;i<l1_size;i++){
+        if(l2_tables[i]!=NULL){
+            free(l2_tables[i]);
+        }
+    }
+    free(l2_tables);
+fail_l2_tables:
+    free(l1_table);
+fail_l1_table:
+
+fail_read_header:
+    free(header);
+fail_header:
+    fclose(o_fp);
+fail1:
+    free(ino.attr);
+fail:
+    //printf("\nfail....");
+    fclose(bi_fp);
+error:
+    printf("\nerror....");
+    for(i=0;all_file_path[i];i++){
+        free(all_file_path[i]);
+    }
+    free(all_file_path);
+    return -1;
+//    fclose(fp);
+//    free(md5str);
+}
 /*
  *author:liuyang
  *date  :2017/4/16
@@ -99,6 +559,8 @@ int ntfs_update_file_metadata(char *overlay_image_path,char *base_image_path,__U
                 printf("\ncan not find file data attribution!");
             }
         }else{
+            //NOT RUN!!!!!!!!!!!!!!!!
+            free(ino->attrs);
             printf("\n*******************ntfs_in_overlay error!!!");
         }
     }
@@ -268,6 +730,7 @@ int ntfs_ua_strncmp(short int* a,char* b,int n)
 	}
 	return 0;
 }
+
 /*
  *author:liuyang
  *date  :2017/4/18
@@ -511,123 +974,7 @@ void ntfs_insert_run(ntfs_attribute *attr,int cnum,__U32_TYPE cluster,int len)
 //	}
 	return 1;
  }
-/*
- *author:liuyang
- *date  :2017/4/18
- *detail: 判断文件记录是否在增量中
- *return
- */
-int ntfs_inode_in_overlay(char *overlay_image_path,struct ntfs_inode_info *ntfs_inode){
-    __U32_TYPE cluster_offset;
-    __U32_TYPE byte_offset_into_cluster;
-    FILE *l_fp;
-    QCowHeader header;
-    __U32_TYPE CLUSTER_BITS;
-    __U32_TYPE CLUSTER_BYTES;
-    __U32_TYPE l1_index;
-    __U32_TYPE l2_index;
-    __U64_TYPE L1_TABLE_OFFSET;
-    __U32_TYPE L2_BITS;
-    __U64_TYPE l1_entry_offset;
-    __U64_TYPE l2_table_offset;
-    __U64_TYPE l2_entry_offset;
-    __U64_TYPE data_offset;//data offset,Must be aligned to a cluster boundary.
-    if(ntfs_inode==NULL){
-        printf("\nntfs_inode_in_overlay error:ntfs inode null!");
-        goto fail;
-    }
-    l_fp=fopen(overlay_image_path,"r");
-    if(l_fp==NULL){
-        printf("\nntfs_inode_in_overlay error:open overlay image failed!");
-        goto fail;
-    }
-    /***************************读取增量镜像header结构体**************************************************/
-    if(fread(&header,sizeof(struct QCowHeader),1,l_fp)<=0){
-        printf("\n read qcow2header failed!");
-        goto fail0;
-    }
-    header.version=__bswap_32(header.version);
-    printf("\nthe magic:%x",header.version);
-    L1_TABLE_OFFSET=__bswap_64(header.l1_table_offset);
-//    header->backing_file_offset=__bswap_64(header->backing_file_offset);
-//    header->backing_file_size=__bswap_32(header->backing_file_size);
-    CLUSTER_BITS=__bswap_32(header.cluster_bits);
-    CLUSTER_BYTES=1<<CLUSTER_BITS;
-    L2_BITS=CLUSTER_BITS-3;
-    cluster_offset=((float)NTFS_OFFSET)/CLUSTER_BYTES+
-                                            ((float)ntfs_inode->i_number)/(CLUSTER_BYTES/ntfs_inode->vol->mft_recordsize)+
-                                                    ((float)ntfs_inode->vol->mft_cluster)/(CLUSTER_BYTES/ntfs_inode->vol->clustersize);
-//    printf("\nNTFS OFFSET:%f\nntfs inode:%f\nmft begin:%f",
-//           ((float)NTFS_OFFSET)/(1<<CLUSTER_BITS),
-//           ((float)ntfs_inode->i_number)/((1<<CLUSTER_BITS)/ntfs_inode->vol->mft_recordsize),
-//           ((float)ntfs_inode->vol->mft_cluster)/((1<<CLUSTER_BITS)/ntfs_inode->vol->clustersize));
-    printf("\ncluster offset:%d",cluster_offset);
-    byte_offset_into_cluster=(NTFS_OFFSET % CLUSTER_BYTES +
-                        ((ntfs_inode->i_number % CLUSTER_BYTES)*(ntfs_inode->vol->mft_recordsize%CLUSTER_BYTES))%CLUSTER_BYTES +
-                            ((ntfs_inode->vol->mft_cluster%CLUSTER_BYTES)*(ntfs_inode->vol->clustersize%CLUSTER_BYTES))%CLUSTER_BYTES)%CLUSTER_BYTES;
-    printf("\nbyte_offset_into_cluster:%x",byte_offset_into_cluster);
-    l1_index=cluster_offset>>L2_BITS;                                   /**l1表的偏移项数*/
-    l2_index=cluster_offset & ((1<<L2_BITS)-1);                         /**l2表的偏移项数*/
-    printf("\ncluster offset:%d\nl1 index:%d,l2 index:%x,\nblocks_bytes_into_cluster%x",cluster_offset,l1_index,l2_index<<3,byte_offset_into_cluster);
-    /*****************************************************读取l1表************************************************************/
-    l1_entry_offset=L1_TABLE_OFFSET+(l1_index<<3);
-    if(fseek(l_fp,l1_entry_offset,SEEK_SET)){
-        printf("\n seek to l1 offset failed!");
-        goto fail0;
-    }
-    if(fread(&l2_table_offset,sizeof(l2_table_offset),1,l_fp)<=0){
-        printf("\n read the l2 offset failed!");
-        goto fail0;
-    }
-    l2_table_offset=__bswap_64(l2_table_offset) & L1E_OFFSET_MASK;
-    printf("\nsize:%ld l2_table_offset:%lx",sizeof(l2_table_offset),l2_table_offset);
-    if(!l2_table_offset){
-        printf("\n l2 table has not been allocated,the data must in backing file!");
-        goto inbacking;
-    }
-    /*****************************************************读取l2表************************************************************/
-    l2_entry_offset=l2_table_offset+(l2_index<<3);
-    if(fseek(l_fp,l2_entry_offset,SEEK_SET)){
-        printf("\n seek to l2_entry_offset failed!");
-        goto fail0;
-    }
-    if(fread(&data_offset,sizeof(data_offset),1,l_fp)<=0){
-        printf("\n read data offset failed!");
-        goto fail0;
-    }
-    data_offset=__bswap_64(data_offset);
-    data_offset=data_offset&L2E_OFFSET_MASK;
-    if(!(data_offset & L2E_OFFSET_MASK)){
-        printf("\n l2 entry has not been allocated,the data must in backing file!");
-        goto inbacking;
-    }
-    printf("\nsize:%ld,the data offset:%x",sizeof(data_offset),data_offset);
 
-    if(fseek(l_fp,0,SEEK_SET)){
-        printf("\n seek to SEEK_SET failed!");
-        goto fail0;
-    }
-    if(fseek(l_fp,data_offset,SEEK_CUR)){
-        printf("\n seek to unsigned long int data_offset failed!");
-        goto fail0;
-    }
-    if(fseek(l_fp,byte_offset_into_cluster,SEEK_CUR)){
-        goto fail0;
-    }
-    if(fread(ntfs_inode->attr,ntfs_inode->vol->mft_recordsize,1,l_fp)<=0){
-        printf("\nerror: read file record failed!");
-        goto fail0;
-    }
-    fclose(l_fp);
-    return 1;
-inbacking:
-    fclose(l_fp);
-    return 0;
-fail0:
-    fclose(l_fp);
-fail:
-    return -1;
-}
 /*
  *author:liuyang
  *date  :2017/4/16

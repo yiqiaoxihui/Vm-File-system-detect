@@ -45,7 +45,7 @@ int ext2_update_file_metadata(char *overlay_image_path,char base_image_path[],__
  *detail:cal overlay vm file md5
  *return void
  */
-int overlay_md5(char *baseImage,char *overlay);
+int ext2_overlay_md5(char *baseImage,char *overlay);
 
 //void statistics_proportion();
 //
