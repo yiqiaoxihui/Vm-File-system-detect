@@ -10,6 +10,8 @@ int main()
         //unsigned long int inodes[2]={5625,10720};
         //ntfs_update_file_metadata("/var/lib/libvirt/images/winxp_snap1.img","/var/lib/libvirt/images/winxp.img",10720,1,11);
     }
+
+    //which_images_by_inode("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap1.img",133301,"/home/base/Desktop/a.txt");
     overlay_md5("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap1.img");
     //allfile_md5();
     //statistics_proportion();
