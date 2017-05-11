@@ -6,6 +6,7 @@
 #include <string.h>
 #include <mysql/mysql.h>
 #include <guestfs.h>
+#include <sys/stat.h>
 #include "../include/ntfs.h"
 #include "../include/qcow2.h"
 #define NTFS_OFFSET 32256      //0x7e00

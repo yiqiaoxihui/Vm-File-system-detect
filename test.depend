@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1494409586 source:/home/heaven/Documents/C/test/main.c
+1494473863 source:/home/heaven/Documents/C/test/main.c
 	"base.h"
 	"include/public.h"
 
@@ -208,15 +208,16 @@
 	<stdint.h>
 	<stdarg.h>
 
-1494407484 source:/home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.c
+1494473821 source:/home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.c
 	"ntfs_main.h"
 
-1493784617 /home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.h
+1494473378 /home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.h
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
 	<mysql/mysql.h>
 	<guestfs.h>
+	<sys/stat.h>
 	"../include/ntfs.h"
 	"../include/qcow2.h"
 
@@ -233,7 +234,7 @@
 	"../include/qcow2.h"
 	"../sql/sqlread.h"
 
-1494429321 source:/home/heaven/Documents/C/test/ext2_qcow2/ext2_main.c
+1494471894 source:/home/heaven/Documents/C/test/ext2_qcow2/ext2_main.c
 	"ext2_main.h"
 
 1492504171 /home/heaven/Documents/C/test/include/ntfs.h

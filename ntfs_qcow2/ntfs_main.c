@@ -127,8 +127,6 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
     ntfs_volume vol;
     char ntfs_super_block[80];
     __U16_TYPE ntfs_cluster_bits;
-    /**ntfs文件inode相关数据结构*/
-
     /**增量镜像相关数据结构*/
     QCowHeader *header;
     __U32_TYPE cluster_bits;
@@ -148,6 +146,19 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
     struct ntfs_inode_info ino;
     ntfs_attribute *attr;
     __U32_TYPE data_cluster_offset;
+    char *attrdata;
+    ntfs_attribute *ntfs_attr;
+    int attr_type,attr_len;
+    void *data;
+    int namelen;
+    short int *name;
+    /**runlist相关*/
+    unsigned char *run_data;
+    int startvcn,endvcn;
+    int vcn,cnum;
+    __U32_TYPE cluster;
+    int len,ctype;
+
     char file_name[256]={NULL};
     char *md5str;
     int i;
@@ -162,12 +173,12 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
     char **all_file_path;
     printf("\nbegin to guestfs......");
 
-    guestfs_h *g=guestfs_create ();
-    guestfs_add_drive(g,overlay);
-    guestfs_launch(g);
-    guestfs_mount(g,"/dev/sda1","/");
+//    guestfs_h *g=guestfs_create ();
+//    guestfs_add_drive(g,overlay);
+//    guestfs_launch(g);
+//    guestfs_mount(g,"/dev/sda1","/");
     printf("\nbegin to get all file......");
-    all_file_path=guestfs_find(g,"/");
+    //all_file_path=guestfs_find(g,"/");
     /***************************************************初始化ntfs文件系统信息**************************************************/
     bi_fp=fopen(baseImage,"r");
     if(bi_fp==NULL){
@@ -188,12 +199,18 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
            vol.blocksize,vol.clusterfactor,vol.mft_cluster,vol.mft_recordsize,vol.mft_clusters_per_record,vol.clustersize);
 
     ino.vol=&vol;
+    ino.attrs=0;
     /*all bit-1*/
     BIT_1_POS(ino.vol->clustersize,ntfs_cluster_bits);
     ino.attr=malloc(vol.mft_recordsize);
     if(!ino.attr){
         printf("\nmalloc error:malloc ino.attr failed!");
         goto fail;
+    }
+    ino.attrs=malloc(sizeof(ntfs_attribute));
+    if(!ino.attrs){
+        printf("\nmalloc error:malloc ino.attrs failed!");
+        goto fail1;
     }
     /***************************************************初始化增量镜像信息**************************************************/
     o_fp=fopen(overlay,"r");
@@ -221,11 +238,11 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
      *将l1,l2表读到内存中，加快速度
      */
     l1_table=malloc(l1_size*sizeof(__U64_TYPE));
-    l2_tables=malloc(l1_size*sizeof(__U64_TYPE));
     if(l1_table==NULL){
         printf("\nallocate l1 table failed!");
         goto fail_l1_table;
     }
+    l2_tables=malloc(l1_size*sizeof(__U64_TYPE));
     if(l2_tables==NULL){
         printf("\nallocate l2 tables failed!");
         goto fail_l2_tables;
@@ -271,38 +288,37 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
         printf("\nthe %d",i);
     }
 
-    for(i=0;all_file_path[i];i++){
-        sprintf(file_name,"/%s",all_file_path[i]);
-        //sprintf(file_name,"/home/base/Desktop/a.txt");
-
-        gs1=guestfs_lstatns(g,file_name);
-        if(gs1==NULL){
-            ext_error_file_count++;
-            continue;
-        }
-        if(S_ISREG(gs1->st_mode)!=1){
-            //printf("\nfile:%s;\ninode:%d",file_name,gs1->st_ino);
-            continue;
-        }
-        ext_all_file_count++;
-        /*****************************开始计算inode结构位置*******************************/
-        //inode_number=gs1->st_ino;
-        ino.i_number=gs1->st_ino;//1072 80H non-resident
-
+    for(i=0;i<1;i++){
+        //sprintf(file_name,"/%s",all_file_path[i]);
+        sprintf(file_name,"/liuyang.txt");
+//        gs1=guestfs_lstatns(g,file_name);
+//        if(gs1==NULL){
+//            ext_error_file_count++;
+//            continue;
+//        }
+//        if(S_ISREG(gs1->st_mode)!=1){
+//            //printf("\nfile:%s;\ninode:%d",file_name,gs1->st_ino);
+//            continue;
+//        }
+//        ext_all_file_count++;
+//        /*****************************开始计算inode结构位置*******************************/
+//        ino.i_number=gs1->st_ino;//1072 80H non-resident,10720 resident
+        ino.i_number=10720;
         cluster_offset=((float)NTFS_OFFSET)/CLUSTER_BYTES+
-                                                ((float)ntfs_inode->i_number)/(CLUSTER_BYTES/ntfs_inode->vol->mft_recordsize)+
-                                                        ((float)ntfs_inode->vol->mft_cluster)/(CLUSTER_BYTES/ntfs_inode->vol->clustersize);
+                                                ((float)ino.i_number)/(CLUSTER_BYTES/ino.vol->mft_recordsize)+
+                                                        ((float)ino.vol->mft_cluster)/(CLUSTER_BYTES/ino.vol->clustersize);
     //    printf("\nNTFS OFFSET:%f\nntfs inode:%f\nmft begin:%f",
     //           ((float)NTFS_OFFSET)/(1<<CLUSTER_BITS),
     //           ((float)ntfs_inode->i_number)/((1<<CLUSTER_BITS)/ntfs_inode->vol->mft_recordsize),
     //           ((float)ntfs_inode->vol->mft_cluster)/((1<<CLUSTER_BITS)/ntfs_inode->vol->clustersize));
-        printf("\ncluster offset:%d",cluster_offset);
+
         bytes_into_cluster=(NTFS_OFFSET % CLUSTER_BYTES +
-                            ((ntfs_inode->i_number % CLUSTER_BYTES)*(ntfs_inode->vol->mft_recordsize%CLUSTER_BYTES))%CLUSTER_BYTES +
-                                ((ntfs_inode->vol->mft_cluster%CLUSTER_BYTES)*(ntfs_inode->vol->clustersize%CLUSTER_BYTES))%CLUSTER_BYTES)%CLUSTER_BYTES;
-        printf("\nbyte_offset_into_cluster:%x",byte_offset_into_cluster);
+                            ((ino.i_number % CLUSTER_BYTES)*(ino.vol->mft_recordsize%CLUSTER_BYTES))%CLUSTER_BYTES +
+                                ((ino.vol->mft_cluster%CLUSTER_BYTES)*(ino.vol->clustersize%CLUSTER_BYTES))%CLUSTER_BYTES)%CLUSTER_BYTES;
+        //printf("\nbyte_offset_into_cluster:%x",byte_offset_into_cluster);
         //((inode_blocks_offset&((1<<(cluster_bits-block_bits))-1))<<block_bits)+inode_bytes_into_block_of_inodetable;
-        //printf("\n:bytes_into_cluster%d",bytes_into_cluster);
+        printf("\nfile record cluster offset:%d",cluster_offset);
+        printf("\nfile record bytes_into_cluster:%d",bytes_into_cluster);
         l1_index=cluster_offset>>l2_bits;
         l2_index=cluster_offset&((1<<l2_bits)-1);
         l1_table_entry=l1_table[l1_index];
@@ -315,14 +331,14 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
             printf("\nl2 table entry not be allocated,inode in base!");
             continue;
         }
-        printf("\ninode_blocks_offset:%d,cluster_offset:%d,l1_index:%d,l2_index:%d",inode_blocks_offset,cluster_offset,l1_index,l2_index);
+        printf("\nl1_index:%d,l2_index:%d",l1_index,l2_index);
 //        printf("\ninode:l1_table_offset:%x",l1_table_entry);
 //        printf("\ninode:l2_table_offset:%x",l2_table_entry);
         if(fseek(o_fp,l2_table_entry+bytes_into_cluster,SEEK_SET)){
             printf("\nseek to l2 table entry failed!");
             continue;
         }
-        if(fread(ntfs_inode->attr,ntfs_inode->vol->mft_recordsize,1,o_fp)<=0){
+        if(fread(ino.attr,ino.vol->mft_recordsize,1,o_fp)<=0){
             printf("\nerror: read file record failed!");
             continue;
         }
@@ -333,66 +349,153 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
         if(!ntfs_check_mft_record(ino.vol,ino.attr,"FILE",ino.vol->mft_recordsize))
         {
             printf("Invalid MFT record corruption");
-
             continue;
         }
-        ino.sequence_number=NTFS_GETU16(ino.attr+0x10);
-        ino.attr_count=0;
+        //ino.sequence_number=NTFS_GETU16(ino.attr+0x10);
         ino.record_count=0;
         ino.records=0;
-        ino.attrs=0;
-        ntfs_load_attributes(&ino);
-        //printf("\nthe runlist number:%d,cluster:%x",ino.attrs[1].d.r.len,ino.attrs[1].d.r.runlist[0].cluster);
-        /*查找文件80属性->文件内容*/
-        attr=ntfs_find_attr(&ino,ino.vol->at_data,0);
-        if(attr){
-            if(attr->resident==0){
-                printf("\非常驻80属性，文件内容在run list 中");
-                printf("\nsuccessful!the runlist number:%d,cluster:%x",attr->d.r.len,attr->d.r.runlist[0].cluster);
-                if(attr->d.r.len>0){
-                    data_cluster_offset=attr->d.r.runlist[0].cluster;
-                    printf("\ndata_cluster_offset:%x,%d;\nthe ntfs_cluster_bits:%d",data_cluster_offset,data_cluster_offset,ntfs_cluster_bits);
-                    cluster_offset=data_cluster_offset/(1<<(cluster_bits-ntfs_cluster_bits))+(float)NTFS_OFFSET/(1<<cluster_bits);
-                    l1_index=cluster_offset>>l2_bits;
-                    l2_index=cluster_offset&((1<<l2_bits)-1);
-                    l1_table_entry=l1_table[l1_index];
-                    if(!l1_table_entry){
-                        printf("\nl1 table entry not be allocated,inode in base!");
-                        continue;
-                    }
-                    l2_table_entry=__bswap_64(l2_tables[l1_index][l2_index])&L2E_OFFSET_MASK;
-                    if(!l2_table_entry){
-                        printf("\nl2 table entry not be allocated,inode in base!");
-                        continue;
-                    }
-                    /**
-                     *file data在增量中
-                     */
-                     overlay_file_number++;
-                     printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
-                     md5str=guestfs_checksum(g,"md5",file_name);
-                     if(md5str!=NULL){
-                        printf("\nfile:%s\nmd5:%s",file_name,md5str);
-                        free(md5str);
-                     }
-                }else{
-                    printf("\nntfs_update_file_metadata:run list problem!");
-                }
-            }else{
-                /**
-                 *file data在增量中
-                 */
-                 printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
-                 md5str=guestfs_checksum(g,"md5",file_name);
-                 if(md5str!=NULL){
-                    printf("\nfile:%s\nmd5:%s",file_name,md5str);
-                    free(md5str);
-                 }
-                printf("\nthe file data attribution is resident,file data must be in overlay!");
-            }
-        }else{
-            printf("\ncan not find file data attribution!");
-        }
+        //ntfs_load_attributes(&ino);
+        /**
+         *加载80属性
+         */
+        {
+            attrdata=ino.attr+NTFS_GETU16(ino.attr+0x14);
+            ino.attr_count=0;
+            do{
+                attr_type=NTFS_GETU32(attrdata);
+                attr_len=NTFS_GETU32(attrdata+4);
+                if(attr_type!=-1) {
+                    /* FIXME: check ntfs_insert_attribute for failure (e.g. no mem)? */
+                    //ntfs_insert_attribute(ino,attrdata);
+                    /*file main meta data info*/
+                    if(attr_type==ino.vol->at_data){
+                        ntfs_attr=ino.attrs+ino.attr_count;
+                        namelen = NTFS_GETU8(attrdata+9);
+                        /* read the attribute's name if it has one */
+                        if(!namelen){
+                            //TODO:in my program ,it no problem
+                            name=0;
+                            ntfs_attr->name=0;
+                        }else{
+                            printf("\n*********************never happen in 80H attr******************");
+                            //TODO do not deal the name
+                            /* 1 Unicode character fits in 2 bytes */
+//                            name=malloc(2*namelen);
+//                            if(!name ){
+//                                printf("\nntfs_load_attributes:malloc error!");
+//
+//                            }
+//                            //Unicode 2400 4900 3300 3000 -> short int 24 49 33 30
+//                            memcpy(name,attrdata+NTFS_GETU16(attrdata+10),2*namelen);
+//                            ntfs_attr->name=name;
+                        }
+                        ntfs_attr->namelen=namelen;
+                        //printf("\nattribution type:%x",attr_type);
+                        ntfs_attr->type=attr_type;
+                        ntfs_attr->resident=(NTFS_GETU8(attrdata+8)==0);
+                        /*如果是常驻属性*/
+                        if(ntfs_attr->resident==1) {
+                            printf("\n:this is a resident attribution");
+                            /**
+                             *文件数据块在增量中,md5
+                             */
+                            printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
+                            overlay_file_number++;
+//                            md5str=guestfs_checksum(g,"md5",file_name);
+//                            if(md5str!=NULL){
+//                                printf("\nfile:%s\nmd5:%s",file_name,md5str);
+//                                free(md5str);
+//                                md5str=NULL;
+//                            }
+                        }else if(ntfs_attr->resident==0){
+                            printf("\n:this is a non-resident attribution");
+                            ntfs_attr->size=NTFS_GETU32(attrdata+0x30);
+                            ino.attrs[ino.attr_count].d.r.runlist=0;
+                            ino.attrs[ino.attr_count].d.r.len=0;
+                            //ntfs_process_runs(ino,ntfs_attr,attrdata);
+                            /**
+                             *ntfs_process_runs
+                             */
+                            {
+                                run_data=attrdata;
+                                startvcn = NTFS_GETU64(run_data+0x10);
+                                endvcn = NTFS_GETU64(run_data+0x18);
+
+                                /* check whether this chunk really belongs to the end */
+                                for(cnum=0,vcn=0;cnum<ntfs_attr->d.r.len;cnum++)
+                                    vcn+=ntfs_attr->d.r.runlist[cnum].len;
+                                if(vcn!=startvcn)
+                                {
+                                    printf("\nProblem with runlist in extended record\n");
+                                    break;
+                                }
+                                if(!endvcn)
+                                {
+                                    endvcn = NTFS_GETU64(run_data+0x28)-1; /* allocated length */
+                                    endvcn /= ino.vol->clustersize;
+                                    printf("\nin ntfs_process_runs endvcn:%ld",endvcn);
+                                }
+                                run_data=run_data+NTFS_GETU16(run_data+0x20);
+                                cnum=ntfs_attr->d.r.len;
+                                cluster=0;
+                                for(vcn=startvcn; vcn<=endvcn; vcn+=len)
+                                {
+                                    if(ntfs_decompress_run(&run_data,&len,&cluster,&ctype)){
+                                        printf("\nerror:ntfs_decompress_run,next file!");
+                                        break;//for(vcn=startvcn; vcn<=endvcn; vcn+=len)
+                                        break;//do while
+                                    }
+                                    if(ctype){
+                                        ntfs_insert_run(ntfs_attr,cnum,-1,len);
+                                    }else{
+                                        /**
+                                         *开始判断文件数据块是否在增量中
+                                         */
+                                        printf("\n\nget the first file data block offset!");
+                                        //ntfs_insert_run(ntfs_attr,cnum,cluster,len);
+                                        cluster_offset=cluster/(1<<(cluster_bits-ntfs_cluster_bits))+(float)NTFS_OFFSET/(1<<cluster_bits);
+                                        l1_index=cluster_offset>>l2_bits;
+                                        l2_index=cluster_offset&((1<<l2_bits)-1);
+                                        l1_table_entry=l1_table[l1_index];
+                                        if(!l1_table_entry){
+                                            printf("\nl1 table entry not be allocated,data in base,next file!");
+                                            break;//for(vcn=startvcn; vcn<=endvcn; vcn+=len)
+                                            break;//do while
+                                        }
+                                        l2_table_entry=__bswap_64(l2_tables[l1_index][l2_index])&L2E_OFFSET_MASK;
+                                        if(!l2_table_entry){
+                                            printf("\nl2 table entry not be allocated,data in base,next file!");
+                                            break;//for(vcn=startvcn; vcn<=endvcn; vcn+=len)
+                                            break;//do while
+                                        }
+                                        /**
+                                         *文件数据块在增量中,md5
+                                         */
+                                        printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
+                                        overlay_file_number++;
+//                                        md5str=guestfs_checksum(g,"md5",file_name);
+//                                        if(md5str!=NULL){
+//                                            printf("\nfile:%s\nmd5:%s",file_name,md5str);
+//                                            free(md5str);
+//                                            md5str=NULL;
+//                                        }
+                                        break;//for(vcn=startvcn; vcn<=endvcn; vcn+=len)
+                                        break;//do while
+                                    }
+                                    cnum++;
+                                }
+                            }//end ntfs_process_runs
+                        }else{
+                            printf("\nresident not 1 or 0,never happen!");
+                        }
+                        //ino.attr_count++;
+                        break;//attr_type=ino.vol->at_data
+                    }//attr_type=ino.vol->at_data
+                }//attr_type!=-1
+                attrdata+=attr_len;
+            }while(attr_type!=-1); /* attribute list ends with type -1 */
+
+        }//end 加载80属性
         //guestfs_free_statns_list(gs1);
     }
     printf("\nall file:%d\nregular file:%d\nerror file:%d;overlay_file:%d\n",i,ext_all_file_count,ext_error_file_count,overlay_file_number);
@@ -416,14 +519,11 @@ out:
         }
     }
     free(l2_tables);
-    guestfs_umount (g, "/");
-    guestfs_shutdown (g);
-    guestfs_close (g);
+//    guestfs_umount (g, "/");
+//    guestfs_shutdown (g);
+//    guestfs_close (g);
     fclose(o_fp);
     fclose(bi_fp);
-    free(e_ino);
-    free(group_desc_table);
-    free(es);
     free(header);
     free(l1_table);
     //free(l2_tables);
@@ -444,6 +544,7 @@ fail_l1_table:
 fail_read_header:
     free(header);
 fail_header:
+    free(ino.attrs);
     fclose(o_fp);
 fail1:
     free(ino.attr);
@@ -459,6 +560,129 @@ error:
     return -1;
 //    fclose(fp);
 //    free(md5str);
+}
+/*
+ *author:liuyang
+ *date  :2017/4/18
+ *detail:循环读取全部runlist项并解析
+ *return int
+ */
+static int ntfs_process_runs(struct ntfs_inode_info *ino,ntfs_attribute* attr,unsigned char *data)
+{
+	int startvcn,endvcn;
+	int vcn,cnum;
+	__U32_TYPE cluster;
+	int len,ctype;
+	startvcn = NTFS_GETU64(data+0x10);
+	endvcn = NTFS_GETU64(data+0x18);
+
+	/* check whether this chunk really belongs to the end */
+	for(cnum=0,vcn=0;cnum<attr->d.r.len;cnum++)
+		vcn+=attr->d.r.runlist[cnum].len;
+	if(vcn!=startvcn)
+	{
+		printf("\nProblem with runlist in extended record\n");
+		return -1;
+	}
+	if(!endvcn)
+	{
+		endvcn = NTFS_GETU64(data+0x28)-1; /* allocated length */
+		endvcn /= ino->vol->clustersize;
+		printf("\nin ntfs_process_runs endvcn:%ld",endvcn);
+	}
+	data=data+NTFS_GETU16(data+0x20);
+	cnum=attr->d.r.len;
+	cluster=0;
+	for(vcn=startvcn; vcn<=endvcn; vcn+=len)
+	{
+		if(ntfs_decompress_run(&data,&len,&cluster,&ctype))
+			return -1;
+		if(ctype)
+			ntfs_insert_run(attr,cnum,-1,len);
+		else
+			ntfs_insert_run(attr,cnum,cluster,len);
+		cnum++;
+	}
+	return 0;
+}
+/*
+ *author:liuyang
+ *date  :2017/4/18
+ *detail:将runlist结构化
+ *return
+ */
+int ntfs_decompress_run(unsigned char **data, int *length, __U32_TYPE *cluster,int *ctype)
+{
+    /*读取第一个字节，并跳过第一字节*/
+	unsigned char type=*(*data)++;
+	*ctype=0;
+	switch(type & 0xF)
+	{
+	case 1: *length=NTFS_GETU8(*data);break;
+	case 2: *length=NTFS_GETU16(*data);break;
+	case 3: *length=NTFS_GETU24(*data);break;
+        case 4: *length=NTFS_GETU32(*data);break;
+        	/* Note: cases 5-8 are probably pointless to code,
+        	   since how many runs > 4GB of length are there?
+        	   at the most, cases 5 and 6 are probably necessary,
+        	   and would also require making length 64-bit
+        	   throughout */
+	default:
+		printf("\nCan't decode run type field %x\n",type);
+		return -1;
+	}
+	/*跳过length所占字节长度*/
+	*data+=(type & 0xF);
+    /* *cluster+= because data maybe <0,it is the run list rule*/
+	switch(type & 0xF0)
+	{
+	case 0:	   *ctype=2; break;
+	case 0x10: *cluster += NTFS_GETS8(*data);break;//pay attention to +=,why?
+	case 0x20: *cluster += NTFS_GETS16(*data);break;
+	case 0x30: *cluster += NTFS_GETS24(*data);break;
+	case 0x40: *cluster += NTFS_GETS32(*data);break;
+#if 0 /* Keep for future, in case ntfs_cluster_t ever becomes 64bit */
+	case 0x50: *cluster += NTFS_GETS40(*data);break;
+	case 0x60: *cluster += NTFS_GETS48(*data);break;
+	case 0x70: *cluster += NTFS_GETS56(*data);break;
+	case 0x80: *cluster += NTFS_GETS64(*data);break;
+#endif
+	default:
+		printf("\nCan't decode run type field %x\n",type);
+		return -1;
+	}
+	/*越过簇偏移所占字节*/
+	*data+=(type >> 4);
+	return 0;
+}
+/*
+ *author:liuyang
+ *date  :2017/4/18
+ *detail:将结构化runlist插入到attr中
+ *return void
+ */
+void ntfs_insert_run(ntfs_attribute *attr,int cnum,__U32_TYPE cluster,int len)
+{
+	/* (re-)allocate space if necessary */
+	if(attr->d.r.len % 8 == 0) {
+		ntfs_runlist* new;
+		new = malloc((attr->d.r.len+8)*sizeof(ntfs_runlist));
+		if( !new )
+			return;
+		if( attr->d.r.runlist ) {
+			memcpy(new, attr->d.r.runlist, attr->d.r.len
+				    *sizeof(ntfs_runlist));
+			free( attr->d.r.runlist );
+		}
+		attr->d.r.runlist = new;
+	}
+	if(attr->d.r.len>cnum)
+		memmove(attr->d.r.runlist+cnum+1,attr->d.r.runlist+cnum,
+			    (attr->d.r.len-cnum)*sizeof(ntfs_runlist));
+	attr->d.r.runlist[cnum].cluster=cluster;
+	attr->d.r.runlist[cnum].len=len;
+	attr->d.r.len++;
+	printf("\nthe %d entry run list:len:%x,cluster:%x",attr->d.r.len,len,cluster);
 }
 /*
  *author:liuyang
@@ -560,7 +784,9 @@ int ntfs_update_file_metadata(char *overlay_image_path,char *base_image_path,__U
             }
         }else{
             //NOT RUN!!!!!!!!!!!!!!!!
-            free(ino->attrs);
+            if(ino.attrs!=NULL){
+                free(ino.attrs);
+            }
             printf("\n*******************ntfs_in_overlay error!!!");
         }
     }
@@ -739,10 +965,10 @@ int ntfs_ua_strncmp(short int* a,char* b,int n)
  */
 static void ntfs_load_attributes(struct ntfs_inode_info* ino)
 {
-	ntfs_attribute *alist;
-	int datasize;
-	int offset,len,delta;
-	char *buf;
+	//ntfs_attribute *alist;
+	//int datasize;
+	//int offset,len,delta;
+	//char *buf;
 	ntfs_volume *vol=ino->vol;
 	char *attrdata;
 	ntfs_attribute *ntfs_attr;
@@ -820,129 +1046,7 @@ static void ntfs_load_attributes(struct ntfs_inode_info* ino)
 
 
 }
-/*
- *author:liuyang
- *date  :2017/4/18
- *detail:循环读取全部runlist项并解析
- *return int
- */
-static int ntfs_process_runs(struct ntfs_inode_info *ino,ntfs_attribute* attr,unsigned char *data)
-{
-	int startvcn,endvcn;
-	int vcn,cnum;
-	__U32_TYPE cluster;
-	int len,ctype;
-	startvcn = NTFS_GETU64(data+0x10);
-	endvcn = NTFS_GETU64(data+0x18);
 
-	/* check whether this chunk really belongs to the end */
-	for(cnum=0,vcn=0;cnum<attr->d.r.len;cnum++)
-		vcn+=attr->d.r.runlist[cnum].len;
-	if(vcn!=startvcn)
-	{
-		printf("\nProblem with runlist in extended record\n");
-		return -1;
-	}
-	if(!endvcn)
-	{
-		endvcn = NTFS_GETU64(data+0x28)-1; /* allocated length */
-		endvcn /= ino->vol->clustersize;
-		printf("\nin ntfs_process_runs endvcn:%ld",endvcn);
-	}
-	data=data+NTFS_GETU16(data+0x20);
-	cnum=attr->d.r.len;
-	cluster=0;
-	for(vcn=startvcn; vcn<=endvcn; vcn+=len)
-	{
-		if(ntfs_decompress_run(&data,&len,&cluster,&ctype))
-			return -1;
-		if(ctype)
-			ntfs_insert_run(attr,cnum,-1,len);
-		else
-			ntfs_insert_run(attr,cnum,cluster,len);
-		cnum++;
-	}
-	return 0;
-}
-/*
- *author:liuyang
- *date  :2017/4/18
- *detail:将runlist结构化
- *return
- */
-int ntfs_decompress_run(unsigned char **data, int *length, __U32_TYPE *cluster,int *ctype)
-{
-    /*读取第一个字节，并跳过第一字节*/
-	unsigned char type=*(*data)++;
-	*ctype=0;
-	switch(type & 0xF)
-	{
-	case 1: *length=NTFS_GETU8(*data);break;
-	case 2: *length=NTFS_GETU16(*data);break;
-	case 3: *length=NTFS_GETU24(*data);break;
-        case 4: *length=NTFS_GETU32(*data);break;
-        	/* Note: cases 5-8 are probably pointless to code,
-        	   since how many runs > 4GB of length are there?
-        	   at the most, cases 5 and 6 are probably necessary,
-        	   and would also require making length 64-bit
-        	   throughout */
-	default:
-		printf("\nCan't decode run type field %x\n",type);
-		return -1;
-	}
-	/*跳过length所占字节长度*/
-	*data+=(type & 0xF);
-    /* *cluster+= because data maybe <0,it is the run list rule*/
-	switch(type & 0xF0)
-	{
-	case 0:	   *ctype=2; break;
-	case 0x10: *cluster += NTFS_GETS8(*data);break;//pay attention to +=,why?
-	case 0x20: *cluster += NTFS_GETS16(*data);break;
-	case 0x30: *cluster += NTFS_GETS24(*data);break;
-	case 0x40: *cluster += NTFS_GETS32(*data);break;
-#if 0 /* Keep for future, in case ntfs_cluster_t ever becomes 64bit */
-	case 0x50: *cluster += NTFS_GETS40(*data);break;
-	case 0x60: *cluster += NTFS_GETS48(*data);break;
-	case 0x70: *cluster += NTFS_GETS56(*data);break;
-	case 0x80: *cluster += NTFS_GETS64(*data);break;
-#endif
-	default:
-		printf("\nCan't decode run type field %x\n",type);
-		return -1;
-	}
-	/*越过簇偏移所占字节*/
-	*data+=(type >> 4);
-	return 0;
-}
-/*
- *author:liuyang
- *date  :2017/4/18
- *detail:将结构化runlist插入到attr中
- *return void
- */
-void ntfs_insert_run(ntfs_attribute *attr,int cnum,__U32_TYPE cluster,int len)
-{
-	/* (re-)allocate space if necessary */
-	if(attr->d.r.len % 8 == 0) {
-		ntfs_runlist* new;
-		new = malloc((attr->d.r.len+8)*sizeof(ntfs_runlist));
-		if( !new )
-			return;
-		if( attr->d.r.runlist ) {
-			memcpy(new, attr->d.r.runlist, attr->d.r.len
-				    *sizeof(ntfs_runlist));
-			free( attr->d.r.runlist );
-		}
-		attr->d.r.runlist = new;
-	}
-	if(attr->d.r.len>cnum)
-		memmove(attr->d.r.runlist+cnum+1,attr->d.r.runlist+cnum,
-			    (attr->d.r.len-cnum)*sizeof(ntfs_runlist));
-	attr->d.r.runlist[cnum].cluster=cluster;
-	attr->d.r.runlist[cnum].len=len;
-	attr->d.r.len++;
-	printf("\nthe %d entry run list:len:%x,cluster:%x",attr->d.r.len,len,cluster);
-}
 /*
  *author:liuyang
  *date  :2017/4/18

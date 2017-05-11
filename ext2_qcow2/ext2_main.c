@@ -1063,11 +1063,11 @@ int ext2_overlay_md5(char *baseImage,char *overlay){
      *将l1,l2表读到内存中，加快速度
      */
     l1_table=malloc(l1_size*sizeof(__U64_TYPE));
-    l2_tables=malloc(l1_size*sizeof(__U64_TYPE));
     if(l1_table==NULL){
         printf("\nallocate l1 table failed!");
         goto fail_l1_table;
     }
+    l2_tables=malloc(l1_size*sizeof(__U64_TYPE));
     if(l2_tables==NULL){
         printf("\nallocate l2 tables failed!");
         goto fail_l2_tables;
