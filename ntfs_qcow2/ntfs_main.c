@@ -173,12 +173,12 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
     char **all_file_path;
     printf("\nbegin to guestfs......");
 
-//    guestfs_h *g=guestfs_create ();
-//    guestfs_add_drive(g,overlay);
-//    guestfs_launch(g);
-//    guestfs_mount(g,"/dev/sda1","/");
+    guestfs_h *g=guestfs_create ();
+    guestfs_add_drive(g,overlay);
+    guestfs_launch(g);
+    guestfs_mount(g,"/dev/sda1","/");
     printf("\nbegin to get all file......");
-    //all_file_path=guestfs_find(g,"/");
+    all_file_path=guestfs_find(g,"/");
     /***************************************************初始化ntfs文件系统信息**************************************************/
     bi_fp=fopen(baseImage,"r");
     if(bi_fp==NULL){
@@ -253,7 +253,7 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
             printf("\nmalloc l2 tables failed!");
             goto fail2;
         }
-        printf("\nmalloc the %d for l2_table!",i);
+        //printf("\nmalloc the %d for l2_table!",i);
     }
 
     if(fseek(o_fp,l1_table_offset,SEEK_SET)){
@@ -285,25 +285,25 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
             }
             printf("\nread the %i l2 table",i);
         }
-        printf("\nthe %d",i);
+        //printf("\nthe %d",i);
     }
 
-    for(i=0;i<1;i++){
-        //sprintf(file_name,"/%s",all_file_path[i]);
-        sprintf(file_name,"/liuyang.txt");
-//        gs1=guestfs_lstatns(g,file_name);
-//        if(gs1==NULL){
-//            ext_error_file_count++;
-//            continue;
-//        }
-//        if(S_ISREG(gs1->st_mode)!=1){
-//            //printf("\nfile:%s;\ninode:%d",file_name,gs1->st_ino);
-//            continue;
-//        }
-//        ext_all_file_count++;
-//        /*****************************开始计算inode结构位置*******************************/
-//        ino.i_number=gs1->st_ino;//1072 80H non-resident,10720 resident
-        ino.i_number=10720;
+    for(i=0;all_file_path[i];i++){
+        sprintf(file_name,"/%s",all_file_path[i]);
+        //sprintf(file_name,"/liuyang.txt");
+        gs1=guestfs_lstatns(g,file_name);
+        if(gs1==NULL){
+            ext_error_file_count++;
+            continue;
+        }
+        if(S_ISREG(gs1->st_mode)!=1){
+            //printf("\nfile:%s;\ninode:%d",file_name,gs1->st_ino);
+            continue;
+        }
+        ext_all_file_count++;
+        /*****************************开始计算inode结构位置*******************************/
+        ino.i_number=gs1->st_ino;//1072 80H non-resident,10720 resident
+        //ino.i_number=1072;// 10720 5625
         cluster_offset=((float)NTFS_OFFSET)/CLUSTER_BYTES+
                                                 ((float)ino.i_number)/(CLUSTER_BYTES/ino.vol->mft_recordsize)+
                                                         ((float)ino.vol->mft_cluster)/(CLUSTER_BYTES/ino.vol->clustersize);
@@ -345,6 +345,7 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
         /**
          *inode在增量中
          */
+        inode_in_overlay_file_number++;
         printf("\n*******************NTFS inode in overlay !");
         if(!ntfs_check_mft_record(ino.vol,ino.attr,"FILE",ino.vol->mft_recordsize))
         {
@@ -396,17 +397,25 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
                         /*如果是常驻属性*/
                         if(ntfs_attr->resident==1) {
                             printf("\n:this is a resident attribution");
+//                            ntfs_attr->size=NTFS_GETU16(attrdata+0x10);
+//                            data=attrdata+NTFS_GETU16(attrdata+0x14);
+//                            ntfs_attr->d.data = (void*)malloc(ntfs_attr->size);
+//                            if( !ntfs_attr->d.data )
+//                                return -1;
+//                            memcpy(ntfs_attr->d.data,data,ntfs_attr->size);
+//                            ntfs_attr->indexed=NTFS_GETU16(attrdata+0x16);
+//                            printf("\nthe attr length:%d,%s",ntfs_attr->size,ntfs_attr->d.data);
                             /**
                              *文件数据块在增量中,md5
                              */
                             printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
                             overlay_file_number++;
-//                            md5str=guestfs_checksum(g,"md5",file_name);
-//                            if(md5str!=NULL){
-//                                printf("\nfile:%s\nmd5:%s",file_name,md5str);
-//                                free(md5str);
-//                                md5str=NULL;
-//                            }
+                            md5str=guestfs_checksum(g,"md5",file_name);
+                            if(md5str!=NULL){
+                                printf("\nfile:%s\nmd5:%s",file_name,md5str);
+                                free(md5str);
+                                md5str=NULL;
+                            }
                         }else if(ntfs_attr->resident==0){
                             printf("\n:this is a non-resident attribution");
                             ntfs_attr->size=NTFS_GETU32(attrdata+0x30);
@@ -451,18 +460,20 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
                                         /**
                                          *开始判断文件数据块是否在增量中
                                          */
-                                        printf("\n\nget the first file data block offset!");
+                                        printf("\n\nget the first file data block offset:%x!",cluster);
                                         //ntfs_insert_run(ntfs_attr,cnum,cluster,len);
                                         cluster_offset=cluster/(1<<(cluster_bits-ntfs_cluster_bits))+(float)NTFS_OFFSET/(1<<cluster_bits);
                                         l1_index=cluster_offset>>l2_bits;
                                         l2_index=cluster_offset&((1<<l2_bits)-1);
                                         l1_table_entry=l1_table[l1_index];
+                                        printf("\l1 index:%x,l2 index:%x",l1_index,l2_index);
                                         if(!l1_table_entry){
                                             printf("\nl1 table entry not be allocated,data in base,next file!");
                                             break;//for(vcn=startvcn; vcn<=endvcn; vcn+=len)
                                             break;//do while
                                         }
                                         l2_table_entry=__bswap_64(l2_tables[l1_index][l2_index])&L2E_OFFSET_MASK;
+                                        printf("\nl1_table_entry:%x,l2_table_entry:%x",l1_table_entry,l2_table_entry);
                                         if(!l2_table_entry){
                                             printf("\nl2 table entry not be allocated,data in base,next file!");
                                             break;//for(vcn=startvcn; vcn<=endvcn; vcn+=len)
@@ -473,12 +484,12 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
                                          */
                                         printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
                                         overlay_file_number++;
-//                                        md5str=guestfs_checksum(g,"md5",file_name);
-//                                        if(md5str!=NULL){
-//                                            printf("\nfile:%s\nmd5:%s",file_name,md5str);
-//                                            free(md5str);
-//                                            md5str=NULL;
-//                                        }
+                                        md5str=guestfs_checksum(g,"md5",file_name);
+                                        if(md5str!=NULL){
+                                            printf("\nfile:%s\nmd5:%s",file_name,md5str);
+                                            free(md5str);
+                                            md5str=NULL;
+                                        }
                                         break;//for(vcn=startvcn; vcn<=endvcn; vcn+=len)
                                         break;//do while
                                     }
@@ -489,7 +500,7 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
                             printf("\nresident not 1 or 0,never happen!");
                         }
                         //ino.attr_count++;
-                        break;//attr_type=ino.vol->at_data
+                        break;
                     }//attr_type=ino.vol->at_data
                 }//attr_type!=-1
                 attrdata+=attr_len;
@@ -498,15 +509,13 @@ int ntfs_overlay_md5(char *baseImage,char *overlay){
         }//end 加载80属性
         //guestfs_free_statns_list(gs1);
     }
-    printf("\nall file:%d\nregular file:%d\nerror file:%d;overlay_file:%d\n",i,ext_all_file_count,ext_error_file_count,overlay_file_number);
+    printf("\nall file:%d\nregular file:%d\nerror file:%d;\ndata in overlay file:%d\ninode_in_overlay_file_number:%d",
+           i,ext_all_file_count,ext_error_file_count,overlay_file_number,inode_in_overlay_file_number);
 //    if(gs1!=NULL){
 //        guestfs_free_statns_list(gs1);
 //    }
-//    printf("\n增量文件占比:%.5f\%",(((float)overlay_file_count)/(all_file_count-error_file_count-read_error))*100);
-//    if(md5str!=NULL){
-//        printf("\nfree last md5!");
-//        free(md5str);
-//    }
+    printf("\n增量文件占比:%.5f%%",(((float)overlay_file_number)/(i-ext_error_file_count))*100);
+
 out:
     printf("\nout....");
     for(i=0;all_file_path[i];i++){
@@ -519,14 +528,15 @@ out:
         }
     }
     free(l2_tables);
-//    guestfs_umount (g, "/");
-//    guestfs_shutdown (g);
-//    guestfs_close (g);
-    fclose(o_fp);
-    fclose(bi_fp);
     free(header);
     free(l1_table);
-    //free(l2_tables);
+    free(ino.attr);
+    free(ino.attrs);
+    fclose(o_fp);
+    fclose(bi_fp);
+    guestfs_umount (g, "/");
+    guestfs_shutdown (g);
+    guestfs_close (g);
     return 1;
 
 fail2:
