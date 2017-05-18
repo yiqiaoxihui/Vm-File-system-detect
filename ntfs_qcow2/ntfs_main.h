@@ -55,5 +55,5 @@ int ntfs_blockInOverlay(char *qcow2Image,unsigned int block_offset,__U16_TYPE bl
  *detail:
  *return
  */
-int ntfs_overlay_md5(char *baseImage,char *overlay);
+int ntfs_overlay_md5(char *baseImage,char *overlay,char *overlay_id);
 #endif // NTFS_MAIN_H_INCLUDED

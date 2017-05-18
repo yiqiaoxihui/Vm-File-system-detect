@@ -10,15 +10,70 @@ int main()
         //unsigned long int inodes[2]={5625,10720};
         //ntfs_update_file_metadata("/var/lib/libvirt/images/winxp_snap1.img","/var/lib/libvirt/images/winxp.img",10720,1,11);
     }
-
+    overlay_scan();
     //which_images_by_inode("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap1.img",133301,"/home/base/Desktop/a.txt");
-    //ext2_overlay_md5("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap1.img");
-    ntfs_overlay_md5("/var/lib/libvirt/images/winxp.img","/var/lib/libvirt/images/winxp_snap1.img");
+    //ext2_overlay_md5("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap3.img");
+    //ntfs_overlay_md5("/var/lib/libvirt/images/winxp.img","/var/lib/libvirt/images/winxp_snap2.img");
     //allfile_md5();
     //statistics_proportion();
     return 0;
 }
-/**
+/*
+ *author:liuyang
+ *date  :2017/5/18
+ *detail:开始全盘扫描
+ *return 1
+ */
+int overlay_scan(){
+
+    char base_image_path[256]={NULL};
+    char **overlay_abspath;
+    char **overlay_id;
+    char *type;
+    int overlay_count;
+    int i;
+
+
+    /******指针空间必须在主函数中分配??*******/
+    overlay_abspath=malloc((MAX_OVERLAY_IMAGES+1)*sizeof(char *));
+    overlay_id=malloc((MAX_OVERLAY_IMAGES+1)*sizeof(char *));
+    /*********************************read the overlay path***************************************/
+    if(sql_read_scan_overlay_name(overlay_abspath,overlay_id)<=0){
+        printf("\n read image abspath failed or no used images!");
+        return 0;
+    }
+    overlay_count=0;
+    for(i=0;overlay_abspath[i];i++){
+            printf("\noverlay_scan, all image:%s",overlay_abspath[i]);
+            overlay_count++;
+    }
+    for(i=0;i<overlay_count;i++){
+        base_image_path[0]='\0';
+        type=malloc(5);
+        if(is_base_image_identical(overlay_id[i],base_image_path)<=0){
+            printf("\nnot identical!exit thread!\n\n\n\n\n\n\n\n\n",overlay_id[i]);
+        }
+        printf("\nidentical!\noverlay_image_id:%s\noverlay_image_path:%s;\nbase image path:%s",overlay_id[i],overlay_abspath[i],base_image_path);
+        sql_get_filesystem_type(overlay_id[i],&type);
+        printf("\ntype:%s",type);
+        if(type!=NULL && strcmp(type,"EXT2")==0){
+            printf("\nin overlay_scan: EXT2!!!");
+            ext2_overlay_md5(base_image_path,overlay_abspath[i],overlay_id[i]);
+        }else if(type!=NULL && strcmp(type,"NTFS")==0){
+            printf("\nin overlay_scan: NTFS!!!");
+            ntfs_overlay_md5(base_image_path,overlay_abspath[i],overlay_id[i]);
+        }else{
+            printf("\nin overlay_scan:error:unknown file system!");
+        }
+        free(type);
+    }
+
+
+    free(overlay_abspath);
+    free(overlay_id);
+    return 1;
+}
+/*
  *author:liuyang
  *date  :2017/3/21
  *detail:拉取该节点增量镜像，开启多线程处理
@@ -94,13 +149,13 @@ int key_files_detect(){
     free(read_image_thread);
     return 1;
 }
-/**
+/*
  *author:liuyang
  *date  :2017/3/21
  *detail:多线程读取多个镜像，更新监控文件信息
  *return 1
  */
- //   /home/Desktop/a.txtff
+ //   /home/Desktop/a.txt
 void *multi_read_image_file(void *var){
     struct ThreadVar *threadVar=(struct ThreadVar *)var;
     char *overlay_image_id;
@@ -193,7 +248,7 @@ void *multi_read_image_file(void *var){
     inodes[count]=0;
     for(i=0;i<count;i++)printf("\n i:%d,inode:%ld",i,inodes[i]);
     type=malloc(5);
-    get_filesystem_type(overlay_image_id,&type);
+    sql_get_filesystem_type(overlay_image_id,&type);
     printf("\ntype:%s",type);
     if(type!=NULL && strcmp(type,"EXT2")==0){
         printf("\nin muti: EXT2!!!");
@@ -220,7 +275,7 @@ normal:
     printf("\nleaven multi thread.......\n\n\n\n\n\n");
     pthread_exit(0);
 }
-/**
+/*
  *author:liuyang
  *date  :2017/5/5
  *detail:get the base image guestfs_h,if not exist,create it
@@ -252,7 +307,7 @@ guestfs_h* get_baseimage_guestfs_h(char *base_image_path){
 fail:
     return NULL;
 }
-/**
+/*
  *author:liuyang
  *date  :2017/5/4
  *detail:begin file restore for the file need to restore
@@ -356,7 +411,7 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
     }
 
 }
-/**
+/*
  *author:liuyang
  *date  :2017/5/4
  *detail:judge file modified by md5,just for file in overlay
@@ -396,13 +451,12 @@ int file_is_modified_by_md5(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW
             sprintf(strsql,"update files set files.isModified=1 where files.id=%s",row[2]);
             if(mysql_query(my_conn,strsql)){
                 printf("\nin multi: modify file isModified=1 failed!");
-
             }
         }
     }
 
 }
-/**
+/*
  *author:liuyang
  *date  :2017/5/4
  *detail:update file info,espacially
@@ -462,6 +516,7 @@ void allfile_md5(){
     guestfs_add_drive(g,"/var/lib/libvirt/images/snap1.img");
     guestfs_launch(g);
     guestfs_mount_ro(g,"/dev/sda1","/");
+    __U32_TYPE all_file_count=0;
     while(!feof(fp)){
         all_file_count++;
         fgets(line,256,fp);
@@ -498,15 +553,15 @@ void allfile_md5(){
  */
 void statistics_proportion(){
     int i;
-    blockInOverlay_error=0;
-    inodeInOverlay_error=0;
-    magic_error=0;
+    __U32_TYPE blockInOverlay_error=0;
+    __U32_TYPE inodeInOverlay_error=0;
+    __U32_TYPE magic_error=0;
 
-    all_file_count=0;
-    error_file_count=0;
-    overlay_file_count=0;
-    inode_in_overlay_file_count=0;
-    read_error=0;
+    __U32_TYPE all_file_count=0;
+    __U32_TYPE error_file_count=0;
+    __U32_TYPE overlay_file_count=0;
+    __U32_TYPE inode_in_overlay_file_count=0;
+    __U32_TYPE read_error=0;
     __U32_TYPE inode_number;
     FILE *fp,*fp1,*fp2;
     char line[256];
@@ -550,16 +605,14 @@ void statistics_proportion(){
         //break;
 
     }
-    for(i=0;i<overlay_file_count;i++){
-        md5str=guestfs_checksum(g,"md5",overlay_filepath[i]);
-        if(md5str==NULL){
-            continue;
-        }
-        free(md5str);
-        printf("\nmd5:%s|file in overlay:%s",md5str,overlay_filepath[i]);
-        //fputs(overlay_filepath[i],fp2);
-        //fputc('\n',fp2);
-    }
+//    for(i=0;i<overlay_file_count;i++){
+//        md5str=guestfs_checksum(g,"md5",overlay_filepath[i]);
+//        if(md5str==NULL){
+//            continue;
+//        }
+//        free(md5str);
+//        printf("\nmd5:%s|file in overlay:%s",md5str,overlay_filepath[i]);
+//    }
     printf("\nall file:%.0f;\nfile in overlay:%d;\ninode in overlay:%0.f;\nerror file:%.0f;\n",all_file_count,overlay_file_count,inode_in_overlay_file_count,error_file_count);
     printf("\nread_error:%0.f;\next2_blockInOverlay error:%d;\ninodeInOverlay:%d;\nmagic_error:%d\n",read_error,blockInOverlay_error,inodeInOverlay_error,magic_error);
     printf("\n增量文件占比:%.5f\%",(((float)overlay_file_count)/(all_file_count-error_file_count-read_error))*100);

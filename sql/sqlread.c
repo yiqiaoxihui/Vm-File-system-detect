@@ -1,6 +1,180 @@
 #include "sqlread.h"
 /*
  *author:liuyang
+ *date  :2017/5/18
+ *detail:update all file scan info
+ *return int
+ */
+int sql_update_scan_info(char *overlay_id,__U32_TYPE all_files,__U32_TYPE overlay_files,__U32_TYPE scan_time){
+    printf("\n\n\n\n\n\n\n begin sql_update_scan_info......%s,%ld,%d,%d",overlay_id,all_files,overlay_files,scan_time);
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    char strsql[256];
+    int baseHas=0;
+    my_conn=mysql_init(NULL);
+    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    {
+        printf("\nConnect Error!");
+        return 0;
+    }
+    /**************************************根据检测结果更新文件位置**************************************/
+    sprintf(strsql,"update fileScanRecord \
+            set allFiles=%d,overlayFiles=%d,scanTime=%d\
+            where overlayId=%s",all_files,overlay_files,scan_time,overlay_id);
+    if(mysql_query(my_conn,strsql)){
+        printf("in sql_update_scan_info update failed!");
+        goto fail;
+    }
+    if(mysql_affected_rows(my_conn)>=0){
+        printf("\n%d update successfully,leave sql_update_scan_info.......\n\n\n\n\n\n",mysql_affected_rows(my_conn));
+    }
+
+    mysql_close(my_conn);
+    return 1;
+fail:
+    mysql_close(my_conn);
+    return -1;
+
+}
+/*
+ *author:liuyang
+ *date  :2017/5/18
+ *detail:read all overlay which need be scan
+ *return int
+ */
+int sql_read_scan_overlay_name(char **image_abspath,char **image_id){
+    printf("\n\n\n\n\nbegin sql_read_scan_overlay_name!");
+    char hostName[32];
+    long int hostId;
+    unsigned long long count;
+    int i;
+    int serverId;
+    int baseImage_status,overlayImage_status;
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    FILE *fp;
+    char strsql[512]={NULL};
+    my_conn=mysql_init(NULL);
+    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    {
+        printf("Connect Error!n");
+        exit(1);
+    }
+    /**************************************************check whether the host exist in database****************************************************/
+    //read server host name and host id
+    if(gethostname(hostName,sizeof(hostName))){
+        perror("gethostname!");
+        goto fail0;
+    }
+    printf("\nread server info,get the image........");
+    hostId=gethostid();
+    //查询数据库中是否有该服务器
+    sprintf(strsql,"select servers.id as sid,servers.IP as sip,servers.status as sstatus from servers where serverNumber=%d and name='%s'",hostId,hostName);
+    printf("%d",strlen(strsql));
+    if(mysql_query(my_conn,strsql)) //连接baseImages表
+    {
+        printf("\nQuery Error,query server failed!n");
+        goto fail0;
+    }
+    res=mysql_store_result(my_conn); //取得表中的数据并存储到res中,mysql_use_result
+    count=mysql_num_rows(res);
+    if(count<=0){//
+        printf("\n error:the server not exist!");
+        goto fail0;
+    }else if(count>1){
+        printf("\n error:the server id repeat!");
+        goto fail0;
+    }else{
+        row=mysql_fetch_row(res);//打印结果
+        int host_status=atoi(row[2]);
+        //host status
+        if(host_status!=1){
+            printf("\n the host stop detecting!");
+            goto fail0;
+        }
+        serverId=atoi(row[0]);
+        //printf("\n host_status:%d,serverId:%d",host_status,serverId);
+    }
+    /**************************************************check whether the host exist in database***end*************************************************/
+
+    sprintf(strsql,"select overlays.absPath,overlays.status,overlays.id \
+            from overlays join baseImages join servers \
+            where servers.id=%d and servers.id=baseImages.server_id and baseImages.id=overlays.baseImageId and overlays.scan=1",serverId);
+    printf("\n******************strsql***************:%d",strlen(strsql));
+    if(mysql_query(my_conn,strsql)){
+        printf("\nQuery Error,query overlay images failed!");
+        goto fail;
+    }
+    res=mysql_store_result(my_conn);
+    count=mysql_num_rows(res);
+    //printf("\nall overlay images count:%d",count);
+    if(count<=0){
+        printf("\nno overlay images in the server!");
+        goto fail;
+    }
+    //image_abspath=malloc((count+1) * sizeof(char *));
+    count=0;
+    while((row=mysql_fetch_row(res))){
+        overlayImage_status=atoi(row[1]);
+        //printf("\n overlay image status:%d",overlayImage_status);
+        /**first,judge the overlay image is exist or not!*/
+        fp=fopen(row[0],"r");
+        if(fp==NULL){
+            printf("\nthe overlay image:%s not exit!",row[0]);
+            sprintf(strsql,"update overlays set status=-1 where id=%s",row[2]);
+            if(mysql_query(my_conn,strsql)){
+                printf("Query Error,update server images status=-1 failed!");
+            }
+            continue;
+        }else if(overlayImage_status==-1){
+            sprintf(strsql,"update overlays set status=0 where id=%s",row[2]);
+            if(mysql_query(my_conn,strsql)){
+                printf("Query Error,update server images status=0 failed!");
+            }
+            fclose(fp);
+        }else{
+            fclose(fp);
+        }
+        if(overlayImage_status!=-1){
+            /**注意row[0]是char*类型，因此无需取地址*/
+            image_abspath[count]=malloc(strlen(row[0])+1);
+            image_id[count]=malloc(strlen(row[2])+1);
+            strcpy(image_abspath[count],row[0]);
+            strcpy(image_id[count],row[2]);
+            count++;
+        }
+    }
+    //it is useful!
+    image_abspath[count]=NULL;
+    image_id[count]=NULL;
+    /**没有可用的镜像*/
+    if(count==0){
+        goto back;
+    }
+    for(i=0;image_abspath[i];i++){
+        printf("\n all need scan overlay images path:%s,id:%s",image_abspath[i],image_id[i]);
+    }
+
+    /*******************************************read overlay images by the host images id***end******************************************/
+    mysql_close(my_conn);
+    printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^1^^^^^^^^^^^^^^^^^^^^^\n\n\n\n\n\n\n\n");
+    return 1;
+back:
+fail:
+    mysql_close(my_conn);
+    printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^0^^^^^^^^^^^^^^^^^^^^^");
+    return 0;
+fail0:
+    mysql_close(my_conn);
+    printf("\n^^^^^^^^^^^^^^^^^^^^^end of read images^-1^^^^^^^^^^^^^^^^^^^^^");
+    return -1;
+
+}
+
+/*
+ *author:liuyang
  *date  :2017/5/5
  *detail:file restore successful,update file info,modified=0,status=1
  *return void
@@ -496,7 +670,7 @@ fail:
  *detail:获取文件类型
  *return char*
  */
-int get_filesystem_type(char *overlayid,char **type){
+int sql_get_filesystem_type(char *overlayid,char **type){
     //printf("\n\n\n\n\nbegin get_filesystem_type......%s",overlayid);
     MYSQL *my_conn;
     MYSQL_RES *res;

@@ -817,7 +817,7 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode,ch
     if(inode_status==1){
         //inode in the overlay
         printf("\n *****************inode in overlay,read inode from overlay successful!!!*****************");
-        inode_in_overlay_file_count++;
+        //inode_in_overlay_file_count++;
         eh=(struct ext4_extent_header *)((char *) &(e_ino->i_block[0]));
         printf("\n eh->magic:%x",eh->eh_magic);
         if(eh->eh_magic==0xf30a){
@@ -834,12 +834,12 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode,ch
                     //printf("\n *********************data blocks in baseImage!!!******************");
                 }else if(block_status==1){
                     //overlay_filepath[overlay_file_count]=malloc(strlen(filepath)+1);
-                    strcpy(overlay_filepath[overlay_file_count],filepath);
-                    overlay_file_count++;
+                    //strcpy(overlay_filepath[overlay_file_count],filepath);
+                    //overlay_file_count++;
                     //printf("\n *********************data blocks in overlay!!!******************");
                 }else{
                     printf("\n *********************ext2_blockInOverlay fail*********************");
-                    blockInOverlay_error++;
+                    //blockInOverlay_error++;
                     goto fail;
                 }
             }else if(eh->eh_depth>0 && eh->eh_entries>0){
@@ -853,12 +853,12 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode,ch
                     //printf("\n *********************index block in base,so data blocks in baseImage !!!******************");
                 }else if(block_status==1){
                     //overlay_filepath[overlay_file_count]=malloc(strlen(filepath)+1);
-                    strcpy(overlay_filepath[overlay_file_count],filepath);
-                    overlay_file_count++;
+                    //strcpy(overlay_filepath[overlay_file_count],filepath);
+                    //overlay_file_count++;
                     //printf("\n *********************index block in overlay,so data blocks in overlay!!!******************");
                 }else{
                     printf("\n *********************ext2_blockInOverlay fail*********************");
-                    blockInOverlay_error++;
+                    //blockInOverlay_error++;
                     goto fail;
                 }
 
@@ -867,7 +867,7 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode,ch
             }
         }else{
             //printf("\n corrupt data in inode block!");
-            magic_error++;
+            //magic_error++;
             goto fail;
         }
     }else if(inode_status==0){// inode in baseImage,so the datablock must be in baseImage
@@ -911,7 +911,7 @@ int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode,ch
 //            }//
     }else{
         printf("\n inodeInOverlay error!");
-        inodeInOverlay_error++;
+        //inodeInOverlay_error++;
         goto fail;
     }
 
@@ -925,9 +925,9 @@ fail:
     free(gdesc);
     free(es);
     fclose(bi_fp);
-    read_error++;
+    //read_error++;
     //error_file_count++;//
-    printf("\nerror_file_count:%.0f",error_file_count);
+    //printf("\nerror_file_count:%.0f",error_file_count);
     return -1;
 }
 
@@ -937,7 +937,9 @@ fail:
  *detail:cal overlay vm file md5
  *return void
  */
-int ext2_overlay_md5(char *baseImage,char *overlay){
+int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
+    time_t start, end;
+    start = time(NULL);
     /**ext2文件系统相关数据结构*/
     struct ext2_super_block *es;
     struct ext2_group_desc *group_desc_table;
@@ -1078,7 +1080,7 @@ int ext2_overlay_md5(char *baseImage,char *overlay){
             printf("\nmalloc l2 tables failed!");
             goto fail2;
         }
-        printf("\nmalloc the %d for l2_table!",i);
+        //printf("\nmalloc the %d for l2_table!",i);
     }
 
     if(fseek(o_fp,l1_table_offset,SEEK_SET)){
@@ -1111,13 +1113,13 @@ int ext2_overlay_md5(char *baseImage,char *overlay){
             }
             printf("\nread the %i l2 table",i);
         }
-        printf("\nthe %d",i);
+        //printf("\nthe %d",i);
     }
 
     for(i=0;all_file_path[i];i++){
         sprintf(file_name,"/%s",all_file_path[i]);
         //sprintf(file_name,"/home/base/Desktop/a.txt");
-
+        //printf("\nfilename:%s",file_name);
         gs1=guestfs_lstatns(g,file_name);
         if(gs1==NULL){
             ext_error_file_count++;
@@ -1254,8 +1256,12 @@ int ext2_overlay_md5(char *baseImage,char *overlay){
         }else{
             printf("\nsomething wrong in block pointer!");
         }
-        //guestfs_free_statns_list(gs1);
+//        if(gs1!=NULL){
+//            guestfs_free_statns_list(gs1);
+//        }
     }
+    end = time(NULL);
+    sql_update_scan_info(overlay_id,ext_all_file_count,overlay_file_number,end-start);
     printf("\nall file:%d\nregular file:%d\nerror file:%d;overlay_file:%d\n",i,ext_all_file_count,ext_error_file_count,overlay_file_number);
 //    if(gs1!=NULL){
 //        guestfs_free_statns_list(gs1);
@@ -1277,17 +1283,17 @@ out:
         }
     }
     free(l2_tables);
-    guestfs_umount (g, "/");
-    guestfs_shutdown (g);
-    guestfs_close (g);
-    fclose(o_fp);
-    fclose(bi_fp);
     free(e_ino);
     free(group_desc_table);
     free(es);
     free(header);
     free(l1_table);
-    //free(l2_tables);
+    guestfs_umount (g, "/");
+    guestfs_shutdown (g);
+    guestfs_close (g);
+    fclose(o_fp);
+    fclose(bi_fp);
+    printf("\nrun time:%d s",end-start);
     return 1;
 
 fail2:
@@ -1327,9 +1333,9 @@ error:
         free(all_file_path[i]);
     }
     free(all_file_path);
+    end = time(NULL);
+    printf("\nrun time:%d s",end-start);
     return -1;
-//    fclose(fp);
-//    free(md5str);
 }
 
 int init_ext2_filesystem(){
