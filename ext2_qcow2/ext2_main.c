@@ -941,7 +941,7 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
     time_t start, end;
     start = time(NULL);
     /**ext2文件系统相关数据结构*/
-    struct ext2_super_block *es;
+    struct ext2_super_block *ext2_sb;
     struct ext2_group_desc *group_desc_table;
     struct ext4_extent_header *eh;
     struct ext4_extent *ee;
@@ -1007,8 +1007,8 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
         goto fail;
     }
     /***************/
-    es=(struct ext2_super_block*)malloc(sizeof(struct ext2_super_block));
-    if(es==NULL){
+    ext2_sb=(struct ext2_super_block*)malloc(sizeof(struct ext2_super_block));
+    if(ext2_sb==NULL){
         printf("\nallocate l1 table failed!");
         goto fail_es;
     }
@@ -1017,21 +1017,20 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
         printf("\nallocate e_ino failed!");
         goto fail_inode;
     }
-    group_desc_table=malloc(block_size);
+    if(fread(ext2_sb,sizeof(struct ext2_super_block),1,bi_fp)<=0){
+        printf("\n read to super block failed!");
+        goto fail_group_desc_table;
+    }
+    block_bits=10+ext2_sb->s_log_block_size;//12
+    block_size=1<<block_bits;//4096
+    inodes_per_group=ext2_sb->s_inodes_per_group;
+    inode_size=ext2_sb->s_inode_size;
+
+    group_desc_table=(struct ext2_group_desc *)malloc(block_size);
     if(group_desc_table==NULL){
         printf("\nallocate group_desc_table failed!");
         goto fail_group_desc_table;
     }
-    if(fread(es,sizeof(struct ext2_super_block),1,bi_fp)<=0){
-        printf("\n read to super block failed!");
-        goto fail1;
-    }
-    block_bits=10+es->s_log_block_size;//12
-    block_size=1<<block_bits;//4096
-    inodes_per_group=es->s_inodes_per_group;
-    inode_size=es->s_inode_size;
-
-
     /**偏移到块组描述符表*/
     printf("\n_ext2_group_desc_offset(block_size):%d",_ext2_group_desc_offset(block_size));
     fseek(bi_fp,_ext2_group_desc_offset(block_size),SEEK_SET);
@@ -1284,8 +1283,8 @@ out:
     }
     free(l2_tables);
     free(e_ino);
-    free(group_desc_table);
-    free(es);
+    free(group_desc_table);//mybe have some problem
+    free(ext2_sb);
     free(header);
     free(l1_table);
     guestfs_umount (g, "/");
@@ -1322,7 +1321,7 @@ fail_group_desc_table:
     free(e_ino);
 fail_inode:
     //printf("\nfail malloc inode....");
-    free(es);
+    free(ext2_sb);
 fail_es:
 fail:
     //printf("\nfail....");

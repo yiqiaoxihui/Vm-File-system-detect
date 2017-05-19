@@ -7,29 +7,48 @@
  */
 int sql_update_scan_info(char *overlay_id,__U32_TYPE all_files,__U32_TYPE overlay_files,__U32_TYPE scan_time){
     printf("\n\n\n\n\n\n\n begin sql_update_scan_info......%s,%ld,%d,%d",overlay_id,all_files,overlay_files,scan_time);
+    int count;
     MYSQL *my_conn;
     MYSQL_RES *res;
     MYSQL_ROW row;
     char strsql[256];
-    int baseHas=0;
     my_conn=mysql_init(NULL);
     if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
     {
         printf("\nConnect Error!");
         return 0;
     }
-    /**************************************根据检测结果更新文件位置**************************************/
-    sprintf(strsql,"update fileScanRecord \
-            set allFiles=%d,overlayFiles=%d,scanTime=%d\
-            where overlayId=%s",all_files,overlay_files,scan_time,overlay_id);
+    sprintf(strsql,"select id from fileScanRecord where overlayId=%s",overlay_id);
     if(mysql_query(my_conn,strsql)){
-        printf("in sql_update_scan_info update failed!");
+        printf("in sql_update_scan_info select failed!");
         goto fail;
     }
-    if(mysql_affected_rows(my_conn)>=0){
-        printf("\n%d update successfully,leave sql_update_scan_info.......\n\n\n\n\n\n",mysql_affected_rows(my_conn));
+    res=mysql_store_result(my_conn); //取得表中的数据并存储到res中,mysql_use_result
+    count=mysql_num_rows(res);
+    if(count==0){
+        printf("\nno this scan record,insert.....");
+        sprintf(strsql,"insert into fileScanRecord (overlayId,allFiles,overlayFiles,scanTime)values(%s,%d,%d,%d)",overlay_id,all_files,overlay_files,scan_time);
+        if(mysql_query(my_conn,strsql)){
+            printf("in sql_update_scan_info insert file scan record failed!");
+            goto fail;
+        }else{
+            printf("\n%d insert successfully,leave sql_update_scan_info.......\n\n\n\n\n\n",mysql_affected_rows(my_conn));
+        }
+    }else{
+        /**************************************根据检测结果更新文件位置**************************************/
+        sprintf(strsql,"update fileScanRecord \
+                set allFiles=%d,overlayFiles=%d,scanTime=%d\
+                where overlayId=%s",all_files,overlay_files,scan_time,overlay_id);
+        if(mysql_query(my_conn,strsql)){
+            printf("in sql_update_scan_info update failed!");
+            goto fail;
+        }
+        if(mysql_affected_rows(my_conn)>=0){
+            printf("\n%d update successfully,leave sql_update_scan_info.......\n\n\n\n\n\n",mysql_affected_rows(my_conn));
+        }else{
+            printf("\nupdate file scan record failed!");
+        }
     }
-
     mysql_close(my_conn);
     return 1;
 fail:
