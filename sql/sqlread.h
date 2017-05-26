@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <mysql/mysql.h>
-
+#include "../include/public.h"
 int read_host_image_name(char **image_abspath,char **image_id);
 
 

@@ -7,10 +7,9 @@ int main()
 {
     //mtrace();
     /**获取数据库信息*/
-
     get_database_info();
     /**关键文件检测*/
-    //key_files_detect();
+    key_files_detect();
     {   /**for test ntfs*/
         //unsigned long int inodes[2]={5625,10720};
         //ntfs_update_file_metadata("/var/lib/libvirt/images/winxp_snap1.img","/var/lib/libvirt/images/winxp.img",10720,1,11);
@@ -50,27 +49,30 @@ int set_disp_mode(int fd,int option)
  *return 1
  */
  int get_database_info(){
-    char url[256];
-    char username[128];
+    char url[256]={NULL};
+    char username[128]={NULL};
     char password[128]={NULL};
+    char database_name[128]={NULL};
     int i=0;
     int s;
-
+    FILE *fp;
     printf("vm files detect v1.0........");
     //sleep(3);
     printf("\nfind the configure file....");
-    FILE *fp;
+
     if(access("/etc/vmdetect/configure.conf",0)==0){
         fp=fopen("/etc/vmdetect/configure.conf","r");
         fgets(url,256,fp);
         url[strlen(url)-1]='\0';
-        printf("%s,%d",url,strlen(url));
+        printf("\n%s,%d",url,strlen(url));
         fgets(username,128,fp);
         username[strlen(username)-1]='\0';
-        printf("%s,%d",username,strlen(username));
+        printf("\n%s,%d",username,strlen(username));
         fgets(password,128,fp);
-        //password[strlen(password)-1]='\0';
-        printf("%s,%d",password,strlen(password));
+        password[strlen(password)-1]='\0';
+        printf("\n%s,%d",password,strlen(password));
+        fgets(database_name,128,fp);
+        printf("\n%s,%d",database_name,strlen(database_name));
         fclose(fp);
     }else{
         printf("\ncan't find the configure....");
@@ -90,27 +92,33 @@ int set_disp_mode(int fd,int option)
             //printf("\n%c",s);
         }
         printf("\npassword:%s",password);
+        set_disp_mode(STDIN_FILENO,1);
+        printf("\nplease input the database name:");
+        scanf("%s",&database_name);
         fp=fopen("/etc/vmdetect/configure.conf","w");
         fputs(&url,fp);
         fputc(10,fp);
         fputs(&username,fp);
         fputc(10,fp);
         fputs(&password,fp);
+        fputc(10,fp);
+        fputs(&database_name,fp);
         fclose(fp);
     }
-
     //i=getchar();
     dataBase.url=malloc(strlen(url)+1);
     dataBase.username=malloc(strlen(username)+1);
     dataBase.password=malloc(strlen(password)+1);
+    dataBase.database_name=malloc(strlen(database_name)+1);
     strcpy(dataBase.url,url);
     strcpy(dataBase.username,username);
+    strcpy(dataBase.database_name,database_name);
     if(strcmp(password,"")==0){
         dataBase.password="";
     }else{
         strcpy(dataBase.password,password);
     }
-    printf("\nurl:%s\nusername:%s;\npassword:%s",dataBase.url,dataBase.username,dataBase.password);
+    printf("\nurl:%s\nusername:%s;\npassword:%s\ndatabase name:%s",dataBase.url,dataBase.username,dataBase.password,dataBase.database_name);
     return 1;
  }
 /*
@@ -278,7 +286,7 @@ void *multi_read_image_file(void *var){
     printf("\nidentical!\noverlay_image_id:%s,overlay_image_path:%s;\nbase image path:%s",overlay_image_id,overlay_image_path,base_image_path);
 
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
     {
         printf("\nConnect Error!");
         mysql_close(my_conn);

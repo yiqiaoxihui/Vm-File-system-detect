@@ -407,7 +407,7 @@ int ext2_inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_of
     MYSQL_ROW row;
     //begin to connect mysql database
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)){
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)){
         printf("\nConnect Error!");
         return -1;
     }

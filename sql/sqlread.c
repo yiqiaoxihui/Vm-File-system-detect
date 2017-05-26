@@ -13,7 +13,7 @@ int sql_update_scan_info(char *overlay_id,__U32_TYPE all_files,__U32_TYPE overla
     MYSQL_ROW row;
     char strsql[256];
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
     {
         printf("\nConnect Error!");
         return 0;
@@ -76,7 +76,7 @@ int sql_read_scan_overlay_name(char **image_abspath,char **image_id){
     FILE *fp;
     char strsql[512]={NULL};
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
     {
         printf("Connect Error!n");
         exit(1);
@@ -206,7 +206,7 @@ int sql_file_restore_result(char *file_id,int restoreType,int result){
     MYSQL_ROW row;
     char strsql[256];
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
     {
         printf("\nConnect Error!n");
         exit(1);
@@ -267,7 +267,7 @@ int sql_get_backup_root(char **backupRoot){
     MYSQL_RES *res;
     MYSQL_ROW row;
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
     {
         printf("\nConnect Error!");
         return -1;
@@ -322,7 +322,7 @@ int sql_get_base_image_path(char **base_image_path,int *image_count){
     FILE *fp;
     char strsql[256];
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
     {
         printf("Connect Error!n");
         exit(1);
@@ -420,7 +420,7 @@ fail0:
     MYSQL_ROW row;
     FILE *fp;
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
     {
         printf("Connect Error!n");
         exit(1);
@@ -637,7 +637,7 @@ fail0:
     char strsql[256];
     int baseHas=0;
     my_conn=mysql_init(NULL);
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
     {
         printf("\nConnect Error!");
         return 0;
@@ -699,7 +699,7 @@ int sql_get_filesystem_type(char *overlayid,char **type){
     //char *type=NULL;
     my_conn=mysql_init(NULL);
     int count=0;
-    if(!mysql_real_connect(my_conn,"127.0.0.1","root","","lqs",0,NULL,0)) //连接detect数据库
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
     {
         printf("\nConnect Error!");
         return 0;

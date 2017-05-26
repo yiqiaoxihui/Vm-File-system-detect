@@ -16,6 +16,7 @@ struct Database{
     char *url;
     char *username;
     char *password;
+    char *database_name;
 };
 struct Database dataBase;
 //float all_file_count;
