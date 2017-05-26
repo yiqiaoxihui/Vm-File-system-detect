@@ -9,7 +9,7 @@
 #include <sys/stat.h>
 #include "../include/ntfs.h"
 #include "../include/qcow2.h"
-#define NTFS_OFFSET 32256      //0x7e00
+#define NTFS_OFFSET 1048576      //0x7e00(32256),win10 1048576
 
 #define IS_MAGIC(a,b)		(*(int*)(a)==*(int*)(b))
 /*ALL BIT -1*/

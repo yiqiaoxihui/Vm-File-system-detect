@@ -1,16 +1,21 @@
 #include "base.h"
 #include "include/public.h"
-
+#include "termios.h"
+#include "errno.h"
+#define ECHOFLAGS (ECHO | ECHOE | ECHOK | ECHONL)
 int main()
 {
     //mtrace();
+    /**获取数据库信息*/
+
+    get_database_info();
     /**关键文件检测*/
     //key_files_detect();
     {   /**for test ntfs*/
         //unsigned long int inodes[2]={5625,10720};
         //ntfs_update_file_metadata("/var/lib/libvirt/images/winxp_snap1.img","/var/lib/libvirt/images/winxp.img",10720,1,11);
     }
-    overlay_scan();
+    //overlay_scan();
     //which_images_by_inode("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap1.img",133301,"/home/base/Desktop/a.txt");
     //ext2_overlay_md5("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap3.img");
     //ntfs_overlay_md5("/var/lib/libvirt/images/winxp.img","/var/lib/libvirt/images/winxp_snap2.img");
@@ -18,6 +23,96 @@ int main()
     //statistics_proportion();
     return 0;
 }
+
+int set_disp_mode(int fd,int option)
+{
+   int err;
+   struct termios term;
+   if(tcgetattr(fd,&term)==-1){
+     perror("Cannot get the attribution of the terminal");
+     return 1;
+   }
+   if(option)
+        term.c_lflag|=ECHOFLAGS;
+   else
+        term.c_lflag &=~ECHOFLAGS;
+   err=tcsetattr(fd,TCSAFLUSH,&term);
+   if(err==-1 && err==EINTR){
+        perror("Cannot set the attribution of the terminal");
+        return 1;
+   }
+   return 0;
+}
+/*
+ *author:liuyang
+ *date  :2017/5/26
+ *detail:获取数据库信息
+ *return 1
+ */
+ int get_database_info(){
+    char url[256];
+    char username[128];
+    char password[128]={NULL};
+    int i=0;
+    int s;
+
+    printf("vm files detect v1.0........");
+    //sleep(3);
+    printf("\nfind the configure file....");
+    FILE *fp;
+    if(access("/etc/vmdetect/configure.conf",0)==0){
+        fp=fopen("/etc/vmdetect/configure.conf","r");
+        fgets(url,256,fp);
+        url[strlen(url)-1]='\0';
+        printf("%s,%d",url,strlen(url));
+        fgets(username,128,fp);
+        username[strlen(username)-1]='\0';
+        printf("%s,%d",username,strlen(username));
+        fgets(password,128,fp);
+        //password[strlen(password)-1]='\0';
+        printf("%s,%d",password,strlen(password));
+        fclose(fp);
+    }else{
+        printf("\ncan't find the configure....");
+        printf("\nplease input the database url:");
+        scanf("%s",&url);
+        printf("\nplease input the database user name:");
+        scanf("%s",&username);
+        getchar();
+        set_disp_mode(STDIN_FILENO,0);
+        printf("\nplease input the database password,if no password,press enter!:");
+        while(1){
+            s=getchar();
+            if(s==10){
+                break;
+            }
+            password[i++]=s;
+            //printf("\n%c",s);
+        }
+        printf("\npassword:%s",password);
+        fp=fopen("/etc/vmdetect/configure.conf","w");
+        fputs(&url,fp);
+        fputc(10,fp);
+        fputs(&username,fp);
+        fputc(10,fp);
+        fputs(&password,fp);
+        fclose(fp);
+    }
+
+    //i=getchar();
+    dataBase.url=malloc(strlen(url)+1);
+    dataBase.username=malloc(strlen(username)+1);
+    dataBase.password=malloc(strlen(password)+1);
+    strcpy(dataBase.url,url);
+    strcpy(dataBase.username,username);
+    if(strcmp(password,"")==0){
+        dataBase.password="";
+    }else{
+        strcpy(dataBase.password,password);
+    }
+    printf("\nurl:%s\nusername:%s;\npassword:%s",dataBase.url,dataBase.username,dataBase.password);
+    return 1;
+ }
 /*
  *author:liuyang
  *date  :2017/5/18
@@ -25,15 +120,12 @@ int main()
  *return 1
  */
 int overlay_scan(){
-
     char base_image_path[256]={NULL};
     char **overlay_abspath;
     char **overlay_id;
     char *type;
     int overlay_count;
     int i;
-
-
     /******指针空间必须在主函数中分配??*******/
     overlay_abspath=malloc((MAX_OVERLAY_IMAGES+1)*sizeof(char *));
     overlay_id=malloc((MAX_OVERLAY_IMAGES+1)*sizeof(char *));
@@ -67,8 +159,6 @@ int overlay_scan(){
         }
         free(type);
     }
-
-
     free(overlay_abspath);
     free(overlay_id);
     return 1;

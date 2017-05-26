@@ -148,6 +148,7 @@ int sql_read_scan_overlay_name(char **image_abspath,char **image_id){
             }
             continue;
         }else if(overlayImage_status==-1){
+            overlayImage_status=0;
             sprintf(strsql,"update overlays set status=0 where id=%s",row[2]);
             if(mysql_query(my_conn,strsql)){
                 printf("Query Error,update server images status=0 failed!");
@@ -720,7 +721,7 @@ int sql_get_filesystem_type(char *overlayid,char **type){
     printf("\nthe file system type:%s",row[0]);
     if(strcmp(*type,"EXT2")==0){
         strcpy(*type,"EXT2");
-    }else if(strcmp(type,"NTFS")==0){
+    }else if(strcmp(*type,"NTFS")==0){
         strcpy(*type,"NTFS");
     }else{
         strcpy(*type,"");

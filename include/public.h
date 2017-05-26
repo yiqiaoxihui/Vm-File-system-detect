@@ -11,7 +11,13 @@ struct ThreadVar{
     char *image_id;
     char *image_path;
 };
-
+/**database*/
+struct Database{
+    char *url;
+    char *username;
+    char *password;
+};
+struct Database dataBase;
 //float all_file_count;
 //float error_file_count;
 //int overlay_file_count;

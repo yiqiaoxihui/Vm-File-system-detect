@@ -1,7 +1,9 @@
 # depslib dependency file v1.0
-1495122027 source:/home/heaven/Documents/C/test/main.c
+1495810191 source:/home/heaven/Documents/C/test/main.c
 	"base.h"
 	"include/public.h"
+	"termios.h"
+	"errno.h"
 
 1488316516 /home/heaven/Downloads/libguestfs-1.36.1/lib/guestfs.h
 	<stddef.h>
@@ -159,7 +161,7 @@
 1490283078 source:/home/heaven/Documents/C/test/sql/csql.h
 	<mysql/mysql.h>
 
-1495160075 source:/home/heaven/Documents/C/test/sql/sqlread.c
+1495679288 source:/home/heaven/Documents/C/test/sql/sqlread.c
 	"sqlread.h"
 
 1490283100 /home/heaven/Documents/C/test/sql/csql.h
@@ -196,7 +198,7 @@
 1490317482 source:/home/heaven/Documents/C/test/sql/sqlread.h
 	<mysql/mysql.h>
 
-1495097827 /home/heaven/Documents/C/test/include/public.h
+1495784420 /home/heaven/Documents/C/test/include/public.h
 	"time.h"
 
 1490608778 /home/heaven/Documents/C/test/lib/guestfs.h
@@ -209,10 +211,10 @@
 	<stdint.h>
 	<stdarg.h>
 
-1495119535 source:/home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.c
+1495764426 source:/home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.c
 	"ntfs_main.h"
 
-1495119414 /home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.h
+1495765171 /home/heaven/Documents/C/test/ntfs_qcow2/ntfs_main.h
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
