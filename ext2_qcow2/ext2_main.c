@@ -948,6 +948,9 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
     MYSQL_ROW row;
     char strsql[256];
     my_conn=mysql_init(NULL);
+    int j,count=0;
+    char **viruses;
+    __U32_TYPE *viruses_id;
     /**ext2文件系统相关数据结构*/
     struct ext2_super_block *ext2_sb;
     struct ext2_group_desc *group_desc_table;
@@ -983,7 +986,6 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
     __U64_TYPE inode_number;
     char *md5str;
     int i=0;
-
 //    float all_file_count;
     __U32_TYPE ext_error_file_count=0;
     __U32_TYPE ext_all_file_count=0;
@@ -1132,12 +1134,31 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
         printf("\nquery virus failed!");
         goto fail3;
     }
+    i=0;
     res=mysql_store_result(my_conn);
+    count=mysql_num_rows(res);
+    printf("\ncount:%d",count);
+    viruses=malloc(count*sizeof(char *));
+    if(viruses==NULL){
+        goto fail3;
+    }
+    viruses_id=malloc(count*sizeof(__U32_TYPE));
+    if(viruses_id==NULL){
+        goto fail4;
+    }
+    while(row=mysql_fetch_row(res)){
+        viruses[i]=malloc(strlen(row[1])+1);
+        strcpy(viruses[i],row[1]);
+        viruses_id[i]=atoi(row[0]);
+        printf("\nviruses_id:%d,length:%d;the virus md5:%s,%s",viruses_id[i],strlen(row[1]),viruses[i],row[1]);
+        i++;
+    }
     /***********************************************开始全盘扫描*****************************************************/
     for(i=0;all_file_path[i];i++){
         sprintf(file_name,"/%s",all_file_path[i]);
-        //sprintf(file_name,"/home/base/Desktop/a.txt");
+        //sprintf(file_name,"/home/base/Desktop/usb_virtus/movemenoreg.vbs");
         //printf("\nfilename:%s",file_name);
+
         gs1=guestfs_lstatns(g,file_name);
         if(gs1==NULL){
             ext_error_file_count++;
@@ -1155,7 +1176,7 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
 
         inodetable_block_offset=group_desc_table[index_in_gdesc_table].bg_inode_table;
         //printf("\ninodetable_block_offset:%x",inodetable_block_offset);
-        printf("\n\n\n\nfilename:%s\ninode:%d,index_in_gdesc_table:%d,inodetable_block_offset:%x",file_name,inode_number,index_in_gdesc_table,inodetable_block_offset);
+        //printf("\n\n\n\nfilename:%s\ninode:%d,index_in_gdesc_table:%d,inodetable_block_offset:%x",file_name,inode_number,index_in_gdesc_table,inodetable_block_offset);
         inode_bytes_into_inodetable=((inode_number-1)%inodes_per_group)*inode_size;
 
         inode_blocks_into_inodetable=inode_bytes_into_inodetable/block_size;
@@ -1172,15 +1193,15 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
         l2_index=cluster_offset&((1<<l2_bits)-1);
         l1_table_entry=l1_table[l1_index];
         if(!l1_table_entry){
-            printf("\nl1 table entry not be allocated,inode in base!");
+            //printf("\nl1 table entry not be allocated,inode in base!");
             //continue;
         }
         l2_table_entry=__bswap_64(l2_tables[l1_index][l2_index])&L2E_OFFSET_MASK;
         if(!l2_table_entry){
-            printf("\nl2 table entry not be allocated,inode in base!");
+            //printf("\nl2 table entry not be allocated,inode in base!");
             continue;
         }
-        printf("\ninode_blocks_offset:%d,cluster_offset:%d,l1_index:%d,l2_index:%d",inode_blocks_offset,cluster_offset,l1_index,l2_index);
+        //printf("\ninode_blocks_offset:%d,cluster_offset:%d,l1_index:%d,l2_index:%d",inode_blocks_offset,cluster_offset,l1_index,l2_index);
 //        printf("\ninode:l1_table_offset:%x",l1_table_entry);
 //        printf("\ninode:l2_table_offset:%x",l2_table_entry);
         if(fseek(o_fp,l2_table_entry+bytes_into_cluster,SEEK_SET)){
@@ -1194,7 +1215,7 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
         /**
          *inode在增量中
          */
-        printf("\nfile size:%d",e_ino->i_size);
+        //printf("\nfile size:%d",e_ino->i_size);
         eh=(struct ext4_extent_header *)((char *)&(e_ino->i_block[0]));
         if(eh->eh_magic!=0xf30a){
             printf("\nbad data blocks pointer,bad magic!");
@@ -1214,14 +1235,14 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
             l1_index=cluster_offset>>l2_bits;
             l2_index=cluster_offset&((1<<l2_bits)-1);
             l1_table_entry=l1_table[l1_index];
-            printf("\ndata_block_offset:%ld;cluster_offset:%ld,data block l1_index:%d,l2_index:%d",data_block_offset,cluster_offset,l1_index,l2_index);
+            //printf("\ndata_block_offset:%ld;cluster_offset:%ld,data block l1_index:%d,l2_index:%d",data_block_offset,cluster_offset,l1_index,l2_index);
             if(!l1_table_entry){
-                printf("\nl1 table entry not be allocated,data in base!");
+                //printf("\nl1 table entry not be allocated,data in base!");
                 continue;
             }
             l2_table_entry=__bswap_64(l2_tables[l1_index][l2_index])&L2E_OFFSET_MASK;
             if(!l2_table_entry){
-                printf("\nl2 table entry not be allocated,data in base!");
+                //printf("\nl2 table entry not be allocated,data in base!");
                 continue;
             }
             //printf("\ndata block:l1_table_offset:%x",l1_table_entry);
@@ -1230,15 +1251,17 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
              *文件内容在增量中，需计算哈希值
              */
             {
-                printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
+                //printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
                 overlay_file_number++;
                 md5str=guestfs_checksum(g,"md5",file_name);
                 if(md5str!=NULL){
-                    printf("\nfile:%s\nmd5:%s",file_name,md5str);
-                    while((row=mysql_fetch_row(res))){
-                        if(strcmp(row[1],md5str)==0){
+                    printf("\nfile:%s",file_name);
+                    for(j=0;j<count;j++){
+                        if(strcmp(viruses[j],md5str)==0){
+                            printf("\nvirus md5:%s,file md5:%s",viruses[j],md5str);
                             if(guestfs_rm(g,file_name)==0){
-                                sql_add_virus_detect_info(overlay_id,file_name,row[0]);
+                                //printf("\noverlay_id:%s;file_name:%s,virus_id:%s",overlay_id,file_name,row[0]);
+                                sql_add_virus_detect_info(overlay_id,file_name,viruses_id[j]);
                             }
                         }
                     }
@@ -1254,33 +1277,43 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
             cluster_offset=(index_block_offset>>(cluster_bits-block_bits))+(EXT2_FILESYSTEM_OFFSET/(1<<cluster_bits));
             l1_index=cluster_offset>>l2_bits;
             l2_index=cluster_offset&((1<<l2_bits)-1);
-            printf("\nindex_block_offset:%ld;cluster_offset:%ld,data block l1_index:%d,l2_index:%d",index_block_offset,cluster_offset,l1_index,l2_index);
+            //printf("\nindex_block_offset:%ld;cluster_offset:%ld,data block l1_index:%d,l2_index:%d",index_block_offset,cluster_offset,l1_index,l2_index);
             l1_table_entry=l1_table[l1_index];
             if(!l1_table_entry){
-                printf("\nl1 table entry not be allocated,data in base!");
+                //printf("\nl1 table entry not be allocated,data in base!");
                 continue;
             }
             l2_table_entry=__bswap_64(l2_tables[l1_index][l2_index])&L2E_OFFSET_MASK;
             if(!l2_table_entry){
-                printf("\nl2 table entry not be allocated,data in base!");
+                //printf("\nl2 table entry not be allocated,data in base!");
                 continue;
             }
             /**
              *文件内容在增量中，需计算哈希值
              */
             {
-                printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
+                //printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
                 overlay_file_number++;
                 md5str=guestfs_checksum(g,"md5",file_name);
                 if(md5str!=NULL){
-                    printf("\nfile:%s\nmd5:%s",file_name,md5str);
-
+                    printf("\nfile:%s",file_name);
+                    for(j=0;j<count;j++){
+                        if(strcmp(viruses[j],md5str)==0){
+                            printf("\nvirus md5:%s,file md5:%s",viruses[j],md5str);
+                            if(guestfs_rm(g,file_name)==0){
+                                //printf("\noverlay_id:%s;file_name:%s,virus_id:%s",overlay_id,file_name,row[0]);
+                                sql_add_virus_detect_info(overlay_id,file_name,viruses_id[j]);
+                            }
+                        }
+                    }
                     free(md5str);
                     md5str=NULL;
+                }else{
+                    printf("\ncal md5 failed!file:%s",file_name);
                 }
             }
         }else{
-            printf("\nsomething wrong in block pointer!");
+            //printf("\nsomething wrong in block pointer!");
         }
 //        if(gs1!=NULL){
 //            guestfs_free_statns_list(gs1);
@@ -1299,6 +1332,13 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
 //    }
 out:
     printf("\nout....");
+    for(i=0;i<count;i++){
+        if(viruses[i]!=NULL){
+            free(viruses[i]);
+        }
+    }
+    free(viruses);
+    free(viruses_id);
     for(i=0;all_file_path[i];i++){
         free(all_file_path[i]);
     }
@@ -1322,6 +1362,8 @@ out:
     mysql_close(my_conn);
     printf("\nrun time:%d s",end-start);
     return 1;
+fail4:
+    free(viruses);
 fail3:
     mysql_close(my_conn);
 fail2:

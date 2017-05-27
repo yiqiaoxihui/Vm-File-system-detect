@@ -30,4 +30,6 @@ int sql_read_scan_overlay_name(char **image_abspath,char **image_id);
  *return int
  */
 int sql_update_scan_info(char *overlayid,__U32_TYPE all_files,__U32_TYPE overlay_files,__U32_TYPE scan_time);
+
+int sql_add_virus_detect_info(char *overlay_id,char *filename,__U32_TYPE virus_id);
 #endif // CSQL_H_INCLUDED

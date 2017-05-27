@@ -123,6 +123,15 @@ fail:
  *return
  */
 int ntfs_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
+    /**病毒库匹配*/
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    char strsql[256];
+    my_conn=mysql_init(NULL);
+    int count,k;
+    char **viruses;
+    __U32_TYPE *viruses_id;
     time_t start,end;
     start=time(NULL);
     /**ntfs文件系统相关数据结构*/
@@ -178,7 +187,7 @@ int ntfs_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
     guestfs_h *g=guestfs_create ();
     guestfs_add_drive(g,overlay);
     guestfs_launch(g);
-    guestfs_mount_ro(g,"/dev/sda2","/");
+    guestfs_mount(g,"/dev/sda1","/");
     printf("\nbegin to get all file......");
     //all_file_path=guestfs_find(g,"/Windows");
     /***************************************************初始化ntfs文件系统信息**************************************************/
@@ -289,6 +298,36 @@ int ntfs_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
         }
         //printf("\nthe %d",i);
     }
+    /***********************************************加载病毒库*****************************************************/
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
+    {
+        printf("\nConnect Error!n");
+        goto fail2;
+    }
+    if(mysql_query(my_conn,"select id,hash from virus")){
+        printf("\nquery virus failed!");
+        goto fail3;
+    }
+    i=0;
+    res=mysql_store_result(my_conn);
+    count=mysql_num_rows(res);
+    printf("\ncount:%d",count);
+    viruses=malloc(count*sizeof(char *));
+    if(viruses==NULL){
+        goto fail3;
+    }
+    viruses_id=malloc(count*sizeof(__U32_TYPE));
+    if(viruses_id==NULL){
+        goto fail4;
+    }
+    while(row=mysql_fetch_row(res)){
+        viruses[i]=malloc(strlen(row[1])+1);
+        strcpy(viruses[i],row[1]);
+        viruses_id[i]=atoi(row[0]);
+        printf("\nviruses_id:%d,length:%d;the virus md5:%s,%s",viruses_id[i],strlen(row[1]),viruses[i],row[1]);
+        i++;
+    }
+    /***********************************************开始全盘扫描*****************************************************/
     char root_dir_name[128];
     char **root_d=guestfs_ls(g,"/");
     for(j=0;root_d[j];j++){
@@ -301,7 +340,7 @@ int ntfs_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
         /****************************************************************************************/
         for(i=0;all_file_path[i];i++){
             sprintf(file_name,"%s%s",root_dir_name,all_file_path[i]);
-            printf("\nfilename:%s",file_name);
+            //printf("\nfilename:%s",file_name);
             //sprintf(file_name,"/liuyang.txt");
             gs1=guestfs_lstatns(g,file_name);
             if(gs1==NULL){
@@ -424,8 +463,17 @@ int ntfs_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
                                 //printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
                                 //md5str=guestfs_cat (g,file_name);
                                 overlay_file_number++;
-                                md5str=guestfs_checksum(g,"sha1",file_name);
+                                md5str=guestfs_checksum(g,"md5",file_name);
                                 if(md5str!=NULL){
+                                    for(k=0;k<count;k++){
+                                        if(strcmp(viruses[k],md5str)==0){
+                                            printf("\nvirus md5:%s,file md5:%s",viruses[k],md5str);
+                                            if(guestfs_rm(g,file_name)==0){
+                                                //printf("\noverlay_id:%s;file_name:%s,virus_id:%s",overlay_id,file_name,row[0]);
+                                                sql_add_virus_detect_info(overlay_id,file_name,viruses_id[k]);
+                                            }
+                                        }
+                                    }
                                     //printf("\nfile:%s\nmd5:%s",file_name,md5str);
                                     free(md5str);
 
@@ -500,8 +548,17 @@ int ntfs_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
                                             //printf("\nbegin to cal md5.....%d,%d",ext_all_file_count,overlay_file_number);
                                             overlay_file_number++;
                                             //md5str=guestfs_cat (g,file_name);
-                                            md5str=guestfs_checksum(g,"sha1",file_name);
+                                            md5str=guestfs_checksum(g,"md5",file_name);
                                             if(md5str!=NULL){
+                                                for(k=0;k<count;k++){
+                                                    if(strcmp(viruses[k],md5str)==0){
+                                                        printf("\nvirus md5:%s,file md5:%s",viruses[k],md5str);
+                                                        if(guestfs_rm(g,file_name)==0){
+                                                            //printf("\noverlay_id:%s;file_name:%s,virus_id:%s",overlay_id,file_name,row[0]);
+                                                            sql_add_virus_detect_info(overlay_id,file_name,viruses_id[k]);
+                                                        }
+                                                    }
+                                                }
                                                 //printf("\nfile:%s\nmd5:%s",file_name,md5str);
                                                 free(md5str);
                                                 //md5str=NULL;
@@ -536,10 +593,6 @@ int ntfs_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
         //break;
         //printf("\nroot:%s",root_d[i]);
     }
-    for(i=0;0;i++){
-        sprintf(file_name,"/Windows%s",all_file_path[i]);
-
-    }
     printf("\nall file:%d\nregular file:%d\nerror file:%d;\ndata in overlay file:%d\ninode_in_overlay_file_number:%d",
            i,ext_all_file_count,ext_error_file_count,overlay_file_number,inode_in_overlay_file_number);
 //    if(gs1!=NULL){
@@ -550,7 +603,13 @@ int ntfs_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
     sql_update_scan_info(overlay_id,ext_all_file_count,overlay_file_number,end-start);
 out:
     printf("\nout....");
-
+    for(i=0;i<count;i++){
+        if(viruses[i]!=NULL){
+            free(viruses[i]);
+        }
+    }
+    free(viruses);
+    free(viruses_id);
     for(i=0;i<l1_size;i++){
         if(l2_tables[i]!=NULL){
             free(l2_tables[i]);
@@ -571,7 +630,10 @@ out:
     guestfs_shutdown (g);
     guestfs_close (g);
     return 1;
-
+fail4:
+    free(viruses);
+fail3:
+    mysql_close(my_conn);
 fail2:
     printf("\nfail_malloc_l2_tables....");
     for(i=0;i<l1_size;i++){
