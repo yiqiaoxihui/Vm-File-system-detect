@@ -66,4 +66,8 @@ void statistics_proportion();
 
 void system_test();
 
+int set_disp_mode(int fd,int option);
+
+ int get_database_info();
+
 #endif // BASE_H_INCLUDED

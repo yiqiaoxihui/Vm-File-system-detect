@@ -715,6 +715,7 @@ fail:
 *return int
 */
 int which_images_by_inode(char *baseImage,char *qcow2Image,unsigned int inode,char *filepath){
+
     struct ext2_super_block *es;
     struct ext2_group_desc *gdesc;
     struct ext4_extent_header *eh;
@@ -938,8 +939,15 @@ fail:
  *return void
  */
 int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
+    printf("\n\n\n\n\nbegin to ext2 all file scan......");
     time_t start, end;
     start = time(NULL);
+    /**病毒库匹配*/
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    char strsql[256];
+    my_conn=mysql_init(NULL);
     /**ext2文件系统相关数据结构*/
     struct ext2_super_block *ext2_sb;
     struct ext2_group_desc *group_desc_table;
@@ -1114,7 +1122,18 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
         }
         //printf("\nthe %d",i);
     }
-
+    /***********************************************加载病毒库*****************************************************/
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
+    {
+        printf("\nConnect Error!n");
+        goto fail2;
+    }
+    if(mysql_query(my_conn,"select id,hash from virus")){
+        printf("\nquery virus failed!");
+        goto fail3;
+    }
+    res=mysql_store_result(my_conn);
+    /***********************************************开始全盘扫描*****************************************************/
     for(i=0;all_file_path[i];i++){
         sprintf(file_name,"/%s",all_file_path[i]);
         //sprintf(file_name,"/home/base/Desktop/a.txt");
@@ -1216,6 +1235,13 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
                 md5str=guestfs_checksum(g,"md5",file_name);
                 if(md5str!=NULL){
                     printf("\nfile:%s\nmd5:%s",file_name,md5str);
+                    while((row=mysql_fetch_row(res))){
+                        if(strcmp(row[1],md5str)==0){
+                            if(guestfs_rm(g,file_name)==0){
+                                sql_add_virus_detect_info(overlay_id,file_name,row[0]);
+                            }
+                        }
+                    }
                     free(md5str);
                     md5str=NULL;
                 }
@@ -1248,6 +1274,7 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
                 md5str=guestfs_checksum(g,"md5",file_name);
                 if(md5str!=NULL){
                     printf("\nfile:%s\nmd5:%s",file_name,md5str);
+
                     free(md5str);
                     md5str=NULL;
                 }
@@ -1261,7 +1288,7 @@ int ext2_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
     }
     end = time(NULL);
     sql_update_scan_info(overlay_id,ext_all_file_count,overlay_file_number,end-start);
-    printf("\nall file:%d\nregular file:%d\nerror file:%d;overlay_file:%d\n",i,ext_all_file_count,ext_error_file_count,overlay_file_number);
+    printf("\nall file:%d\nregular file:%d\nerror file:%d;\noverlay_file:%d\n",i,ext_all_file_count,ext_error_file_count,overlay_file_number);
 //    if(gs1!=NULL){
 //        guestfs_free_statns_list(gs1);
 //    }
@@ -1292,9 +1319,11 @@ out:
     guestfs_close (g);
     fclose(o_fp);
     fclose(bi_fp);
+    mysql_close(my_conn);
     printf("\nrun time:%d s",end-start);
     return 1;
-
+fail3:
+    mysql_close(my_conn);
 fail2:
     printf("\nfail_malloc_l2_tables....");
     for(i=0;i<l1_size;i++){

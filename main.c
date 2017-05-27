@@ -14,7 +14,8 @@ int main()
         //unsigned long int inodes[2]={5625,10720};
         //ntfs_update_file_metadata("/var/lib/libvirt/images/winxp_snap1.img","/var/lib/libvirt/images/winxp.img",10720,1,11);
     }
-    //overlay_scan();
+    /**全盘扫描*/
+    overlay_scan();
     //which_images_by_inode("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap1.img",133301,"/home/base/Desktop/a.txt");
     //ext2_overlay_md5("/var/lib/libvirt/images/base.img","/var/lib/libvirt/images/snap3.img");
     //ntfs_overlay_md5("/var/lib/libvirt/images/winxp.img","/var/lib/libvirt/images/winxp_snap2.img");
@@ -22,7 +23,12 @@ int main()
     //statistics_proportion();
     return 0;
 }
-
+/*
+ *author:liuyang
+ *date  :2017/5/26
+ *detail:控制台输入回显，option:0,不显示;1,显示
+ *return 1
+ */
 int set_disp_mode(int fd,int option)
 {
    int err;
@@ -128,6 +134,7 @@ int set_disp_mode(int fd,int option)
  *return 1
  */
 int overlay_scan(){
+    printf("\n\n\n\n\nbegin to all file scan.......");
     char base_image_path[256]={NULL};
     char **overlay_abspath;
     char **overlay_id;
@@ -328,7 +335,7 @@ void *multi_read_image_file(void *var){
             update_file_info(g,gs1,my_conn,strsql,row);
             inodes[count]=gs1->st_ino;
             count++;
-        }else{/**该文件在镜像中不存在,status=-1*/
+        }else{/**该文件在镜像中不存在,lost=1*/
             sprintf(strsql,"update files set lost=1 where files.id=%s",row[1]);
             if(mysql_query(my_conn,strsql)){
                 printf("\nin muti:update the status of file failed!!!");
@@ -431,7 +438,7 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
         printf("\nget server host backup root failed!");
         return -1;
     }
-    sprintf(strsql,"select files.absPath,files.baseHas,overlays.backupPath,files.status,files.id from files join overlays where  overlays.id=%s and files.overlayId=overlays.id and files.restore=1",overlay_image_id);
+    sprintf(strsql,"select files.absPath,files.baseHas,overlays.backupPath,files.status,files.id,file.lost,file.isModified from files join overlays where  overlays.id=%s and files.overlayId=overlays.id and files.restore=1",overlay_image_id);
     if(mysql_query(my_conn,strsql)){
         printf("\nquery file need restore failed!");
         return -1;
@@ -479,11 +486,12 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
             //TODO restore from local host backup
         }else{
             printf("\n\n\n\n\n\noverlay id:%s;file %s in base image,have download!",overlay_image_id,row[0]);
-            if(atoi(row[3])==-1){
+            if(atoi(row[5])==1 && atoi(row[6])==0){
                 printf("\nfile %s lost,upload directly!",row[0]);
                 if(guestfs_upload(g,dir_name,row[0])==0){
                     printf("\nfile upload successful!!!");
                     /**更新还原信息*/
+                    //char *file_id,int restoreType,int result
                     sql_file_restore_result(row[4],1,1);
                 }else{
                     sql_file_restore_result(row[4],1,-1);

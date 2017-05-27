@@ -298,6 +298,7 @@ int ntfs_overlay_md5(char *baseImage,char *overlay,char *overlay_id){
         }
         printf("\n\n\nroot_dir:%s",root_dir_name);
         all_file_path=guestfs_find(g,root_dir_name);
+        /****************************************************************************************/
         for(i=0;all_file_path[i];i++){
             sprintf(file_name,"%s%s",root_dir_name,all_file_path[i]);
             printf("\nfilename:%s",file_name);

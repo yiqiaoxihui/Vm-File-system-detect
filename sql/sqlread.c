@@ -1,4 +1,28 @@
 #include "sqlread.h"
+
+int sql_add_virus_detect_info(char *overlay_id,char *filename,char *virus_id){
+    MYSQL *my_conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    char strsql[256];
+    my_conn=mysql_init(NULL);
+    if(!mysql_real_connect(my_conn,dataBase.url,dataBase.username,dataBase.password,dataBase.database_name,0,NULL,0)) //连接detect数据库
+    {
+        printf("\nConnect Error!");
+        return 0;
+    }
+    sprintf(strsql,"insert into virusKill (overlayId,filename,virusId)values(%s,%s,%s)",overlay_id,filename,virus_id);
+    if(mysql_query(my_conn,strsql)){
+        printf("in sql_update_scan_info select failed!");
+        goto fail;
+    }
+    mysql_close(my_conn);
+    return 1;
+fail:
+    mysql_close(my_conn);
+    return -1;
+
+}
 /*
  *author:liuyang
  *date  :2017/5/18
