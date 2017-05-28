@@ -293,7 +293,9 @@ int ext2_inodes_in_overlay(char *baseImage,char *qcow2Image,__U32_TYPE *block_of
     /***************************根据块偏移映射到l1,l2表，判断该块在增量中是否分配****************************************************************/
     //the beginning 1M(256 blocks) not belongs to ext4 fs,I think.
     for(i=0;i<inode_count;i++){
-        block_offset[i]+=256;
+
+        block_offset[i]+=EXT2_FILESYSTEM_OFFSET/(1<<BLOCK_BITS);
+        printf("\nEXT2_FILESYSTEM_OFFSET/(1<<BLOCK_BITS):%d",EXT2_FILESYSTEM_OFFSET/(1<<BLOCK_BITS));
         cluster_offset=block_offset[i]/(1<<(CLUSTER_BITS-BLOCK_BITS));      /**cluster偏移块数*/
         block_into_cluster=block_offset[i]%(1<<(CLUSTER_BITS-BLOCK_BITS));  /**cluster内块偏移数*/
         blocks_bytes_into_cluster=block_into_cluster<<BLOCK_BITS;           /**cluster块偏移的字节数*/
@@ -514,8 +516,8 @@ int ext2_blockInOverlay(char *qcow2Image,unsigned int block_offset,__U16_TYPE bl
     }
     l1_table_offset=__bswap_64(header.l1_table_offset);
     cluster_bits=__bswap_32(header.cluster_bits);
-    printf("\ndata block offset:%d",block_offset);
-    block_offset+=256;
+    printf("\ndata block offset:%d,EXT2_FILESYSTEM_OFFSET/(1<<block_bits):%d",block_offset,EXT2_FILESYSTEM_OFFSET/(1<<block_bits));
+    block_offset+=EXT2_FILESYSTEM_OFFSET/(1<<block_bits);
 
     /*******************************************根据块偏移映射到l1,l2表，判断该块在增量中是否分配************************************************/
     cluster_offset=block_offset/(1<<(cluster_bits-block_bits));

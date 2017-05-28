@@ -419,7 +419,7 @@ fail:
  *return void
  */
 int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char strsql[],char *overlay_image_id,char *base_image_path){
-    //printf("\n\n\n\n\nbegin file restore!");
+    printf("\n\n\n\n\nbegin file restore........");
     int baseHas=0;
     int flag=1;
     char dir_name[128]={NULL};
@@ -438,7 +438,7 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
         printf("\nget server host backup root failed!");
         return -1;
     }
-    sprintf(strsql,"select files.absPath,files.baseHas,overlays.backupPath,files.status,files.id,file.lost,file.isModified from files join overlays where  overlays.id=%s and files.overlayId=overlays.id and files.restore=1",overlay_image_id);
+    sprintf(strsql,"select files.absPath,files.baseHas,overlays.backupPath,files.status,files.id,files.lost,files.isModified from files join overlays where overlays.id=%s and files.overlayId=overlays.id and files.restore=1",overlay_image_id);
     if(mysql_query(my_conn,strsql)){
         printf("\nquery file need restore failed!");
         return -1;
@@ -487,7 +487,7 @@ int file_restore(guestfs_h *g,MYSQL *my_conn,MYSQL_RES *res,MYSQL_ROW row,char s
         }else{
             printf("\n\n\n\n\n\noverlay id:%s;file %s in base image,have download!",overlay_image_id,row[0]);
             if(atoi(row[5])==1 && atoi(row[6])==0){
-                printf("\nfile %s lost,upload directly!",row[0]);
+                printf("\nfile lost:%s ,upload directly!",row[0]);
                 if(guestfs_upload(g,dir_name,row[0])==0){
                     printf("\nfile upload successful!!!");
                     /**更新还原信息*/
